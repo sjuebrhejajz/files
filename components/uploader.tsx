@@ -191,17 +191,17 @@ function UploadRow({ item, onRemove }: { item: UploadItem; onRemove: () => void 
         </div>
       )}
 
-      {item.status === "done" && item.viewUrl && (
+      {item.status === "done" && item.rawUrl && (
         <div className="mt-3 flex items-center gap-2">
           <input
             readOnly
-            value={item.viewUrl}
+            value={item.rawUrl}
             onFocus={(e) => e.currentTarget.select()}
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
           />
           <button
             type="button"
-            onClick={() => copy(item.viewUrl!)}
+            onClick={() => copy(item.rawUrl!)}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
