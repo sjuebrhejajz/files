@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { headers } from "next/headers"
 import { notFound } from "next/navigation"
 import { resolveFile } from "@/lib/files"
 import { FileViewer } from "@/components/file-viewer"
@@ -7,8 +8,12 @@ export const dynamic = "force-dynamic"
 
 type Props = { params: Promise<{ id: string }> }
 
-function siteUrl() {
-  return process.env.NEXT_PUBLIC_SITE_URL || "https://files.uncertain.uk"
+async function siteUrl() {
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL
+  const h = await headers()
+  const host = h.get("host")
+  const proto = h.get("x-forwarded-proto") ?? "https"
+  return host ? `${proto}://${host}` : "https://files.uncertain.uk"
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -16,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const file = await resolveFile(id)
   if (!file) return { title: "File not found" }
 
-  const base = siteUrl()
+  const base = await siteUrl()
   const rawUrl = `${base}/f/${encodeURIComponent(file.pathname)}`
   const pageUrl = `${base}/v/${encodeURIComponent(file.pathname)}`
 

@@ -10,15 +10,15 @@ export default function Page() {
           <h1 className="font-mono text-lg font-semibold tracking-tight text-foreground">files.uncertain.uk</h1>
         </div>
         <p className="max-w-md text-balance text-sm leading-relaxed text-muted-foreground">
-          Private file hosting with instant, shareable links that embed inline in Discord. Files vanish after 24 hours.
+          Private file hosting with instant, shareable links that embed inline in Discord. Files vanish after 12 hours.
         </p>
       </header>
 
       <Uploader />
 
       <ul className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Feature icon={<Zap className="size-4" />} title="Up to 250 MB" desc="Large videos and files supported." />
-        <Feature icon={<Clock className="size-4" />} title="24h expiry" desc="Everything auto-deletes daily." />
+        <Feature icon={<Zap className="size-4" />} title="Up to 100 MB" desc="Large videos and files supported." />
+        <Feature icon={<Clock className="size-4" />} title="12h expiry" desc="Everything auto-deletes daily." />
         <Feature icon={<ShieldCheck className="size-4" />} title="Unlisted" desc="Only people with the link can view." />
       </ul>
 

@@ -3,9 +3,9 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
-const DAY_MS = 24 * 60 * 60 * 1000
+const EXPIRY_MS = 12 * 60 * 60 * 1000
 
-// Deletes any blob older than 24h. Triggered by Vercel Cron (see vercel.json).
+// Deletes any blob older than 12h. Triggered by Vercel Cron (see vercel.json).
 // Falls back to the blob's uploadedAt time if the pathname has no timestamp.
 export async function GET(request: NextRequest) {
   // Vercel Cron requests include this header when CRON_SECRET is set.
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
         const name = blob.pathname.split("/").pop() ?? ""
         const tsMatch = name.match(/^(\d+)__/)
         const uploadedAt = tsMatch ? Number(tsMatch[1]) : new Date(blob.uploadedAt).getTime()
-        if (now - uploadedAt > DAY_MS) {
+        if (now - uploadedAt > EXPIRY_MS) {
           toDelete.push(blob.url)
         }
       }

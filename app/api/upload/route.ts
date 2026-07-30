@@ -1,8 +1,8 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client"
 import { type NextRequest, NextResponse } from "next/server"
 
-// 250 MB per file
-const MAX_BYTES = 250 * 1024 * 1024
+// 100 MB per file
+const MAX_BYTES = 100 * 1024 * 1024
 
 // Allowed content types for direct inline embedding. We still accept anything,
 // but this list drives client-side hints. Keep broad so any file can be hosted.

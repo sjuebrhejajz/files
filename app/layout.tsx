@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'files.uncertain.uk',
-  description: 'Private file hosting with shareable links that embed in Discord. Up to 250MB, auto-deleted after 24h.',
+  description: 'Private file hosting with shareable links that embed in Discord. Up to 100MB, auto-deleted after 12h.',
   generator: 'v0.app',
   icons: {
     icon: [

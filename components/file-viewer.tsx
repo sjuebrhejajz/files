@@ -68,7 +68,7 @@ export function FileViewer({ file, rawUrl }: { file: ResolvedFile; rawUrl: strin
         </div>
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">This file is automatically deleted 24 hours after upload.</p>
+      <p className="text-center text-xs text-muted-foreground">This file is automatically deleted 12 hours after upload.</p>
     </main>
   )
 }

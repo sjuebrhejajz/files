@@ -6,7 +6,7 @@ import { useCallback, useRef, useState } from "react"
 import { upload } from "@vercel/blob/client"
 import { UploadCloud, Copy, Check, X, FileIcon, Loader2, ExternalLink } from "lucide-react"
 
-const MAX_BYTES = 250 * 1024 * 1024
+const MAX_BYTES = 100 * 1024 * 1024
 
 type UploadItem = {
   id: string
@@ -41,7 +41,7 @@ export function Uploader() {
 
     if (file.size > MAX_BYTES) {
       setItems((prev) => [
-        { id, name: file.name, size: file.size, status: "error", progress: 0, error: "Exceeds 250 MB limit" },
+        { id, name: file.name, size: file.size, status: "error", progress: 0, error: "Exceeds 100 MB limit" },
         ...prev,
       ])
       return
@@ -117,7 +117,7 @@ export function Uploader() {
         </div>
         <div className="space-y-1">
           <p className="text-base font-medium text-foreground">Drop files here or click to upload</p>
-          <p className="text-sm text-muted-foreground">Up to 250 MB per file &middot; auto-deleted after 24 hours</p>
+          <p className="text-sm text-muted-foreground">Up to 100 MB per file &middot; auto-deleted after 12 hours</p>
         </div>
         <input
           ref={inputRef}
