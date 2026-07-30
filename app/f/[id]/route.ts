@@ -1,6 +1,5 @@
-import { list } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
-import { displayNameFor } from "@/lib/files"
+import { displayNameFor, findBlobByShortId } from "@/lib/files"
 
 export const dynamic = "force-dynamic"
 
@@ -11,10 +10,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
 
   try {
-    // Look up the blob by its pathname prefix (the id is the encoded pathname).
-    const decoded = decodeURIComponent(id)
-    const { blobs } = await list({ prefix: decoded, limit: 1 })
-    const blob = blobs.find((b) => b.pathname === decoded) ?? blobs[0]
+    const blob = await findBlobByShortId(decodeURIComponent(id))
 
     if (!blob) {
       return new NextResponse("Not found", { status: 404 })
@@ -29,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return new NextResponse("Not found", { status: 404 })
     }
 
-    const displayName = displayNameFor(decoded)
+    const displayName = displayNameFor(blob.pathname)
 
     const headers = new Headers()
     const contentType = upstream.headers.get("content-type") ?? "application/octet-stream"

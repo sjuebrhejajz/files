@@ -49,12 +49,15 @@ export function Uploader() {
 
     setItems((prev) => [{ id, name: file.name, size: file.size, status: "uploading", progress: 0 }, ...prev])
 
-    // Timestamp + safe name so the cleanup cron can expire it after 24h.
+    // Short id used to build a clean, shareable link (e.g. /f/aB3xQ9k)
+    // instead of exposing the full original filename in the URL.
+    const shortId = crypto.randomUUID().replace(/-/g, "").slice(0, 8)
+    // Timestamp + shortId + safe name so the cleanup cron can expire it after 12h.
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const pathname = `${Date.now()}__f__${safeName}`
+    const pathname = `${Date.now()}__f__${shortId}__${safeName}`
 
     try {
-      const blob = await upload(pathname, file, {
+      await upload(pathname, file, {
         access: "public",
         handleUploadUrl: "/api/upload",
         contentType: file.type || undefined,
@@ -63,8 +66,8 @@ export function Uploader() {
         },
       })
 
-      const rawUrl = `${origin()}/f/${encodeURIComponent(blob.pathname)}`
-      const viewUrl = `${origin()}/v/${encodeURIComponent(blob.pathname)}`
+      const rawUrl = `${origin()}/f/${shortId}`
+      const viewUrl = `${origin()}/v/${shortId}`
       setItems((prev) =>
         prev.map((it) => (it.id === id ? { ...it, status: "done", progress: 100, rawUrl, viewUrl } : it)),
       )

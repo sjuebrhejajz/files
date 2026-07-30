@@ -19,18 +19,30 @@ function kindFor(contentType: string): ResolvedFile["kind"] {
 
 export function displayNameFor(pathname: string) {
   const name = pathname.split("/").pop() ?? pathname
-  // Strip the leading "timestamp__f__" prefix we add on upload.
-  let clean = name.replace(/^\d+__[^_]*__/, "")
+  // Strip the leading "timestamp__f__shortId__" prefix we add on upload.
+  let clean = name.replace(/^\d+__f__[^_]+__/, "")
   // Strip Blob's appended random suffix before the extension, e.g.
   // "clip-MwzVtRhXM4TA2YWKY9pgT81sxPirib.mp4" -> "clip.mp4".
   clean = clean.replace(/-[A-Za-z0-9]{20,}(\.[^.]+)?$/, "$1")
   return clean
 }
 
-export async function resolveFile(id: string): Promise<ResolvedFile | null> {
-  const decoded = decodeURIComponent(id)
-  const { blobs } = await list({ prefix: decoded, limit: 1 })
-  const blob = blobs.find((b) => b.pathname === decoded) ?? blobs[0]
+// Finds a blob by its short id (embedded in the pathname as
+// "<timestamp>__f__<shortId>__<name>"). Paginates through the store since
+// Blob has no direct key lookup by an arbitrary substring.
+export async function findBlobByShortId(shortId: string) {
+  let cursor: string | undefined
+  do {
+    const result = await list({ cursor, limit: 1000 })
+    const match = result.blobs.find((b) => b.pathname.includes(`__${shortId}__`))
+    if (match) return match
+    cursor = result.cursor
+  } while (cursor)
+  return null
+}
+
+export async function resolveFile(shortId: string): Promise<ResolvedFile | null> {
+  const blob = await findBlobByShortId(shortId)
   if (!blob) return null
 
   // Fetch a HEAD-ish request to learn the content type.
