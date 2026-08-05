@@ -1,12 +1,13 @@
-import { del, list } from "@vercel/blob"
+import { ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3"
 import { type NextRequest, NextResponse } from "next/server"
+import { r2, BUCKET_NAME } from "@/lib/r2"
 
 export const dynamic = "force-dynamic"
 
-const EXPIRY_MS = 12 * 60 * 60 * 1000
+const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
 
-// Deletes any blob older than 12h. Triggered by Vercel Cron (see vercel.json).
-// Falls back to the blob's uploadedAt time if the pathname has no timestamp.
+// Deletes any object older than 7 days. Triggered by Vercel Cron (see vercel.json).
+// Falls back to the object's LastModified time if the key has no timestamp.
 export async function GET(request: NextRequest) {
   // Vercel Cron requests include this header when CRON_SECRET is set.
   const auth = request.headers.get("authorization")
@@ -15,25 +16,35 @@ export async function GET(request: NextRequest) {
   }
 
   const now = Date.now()
-  let cursor: string | undefined
-  const toDelete: string[] = []
+  let ContinuationToken: string | undefined
+  const toDelete: { Key: string }[] = []
 
   try {
     do {
-      const result = await list({ cursor, limit: 1000 })
-      for (const blob of result.blobs) {
-        const name = blob.pathname.split("/").pop() ?? ""
+      const result = await r2.send(
+        new ListObjectsV2Command({ Bucket: BUCKET_NAME, ContinuationToken }),
+      )
+      for (const obj of result.Contents ?? []) {
+        if (!obj.Key) continue
+        const name = obj.Key.split("/").pop() ?? ""
         const tsMatch = name.match(/^(\d+)__/)
-        const uploadedAt = tsMatch ? Number(tsMatch[1]) : new Date(blob.uploadedAt).getTime()
+        const uploadedAt = tsMatch ? Number(tsMatch[1]) : (obj.LastModified?.getTime() ?? now)
         if (now - uploadedAt > EXPIRY_MS) {
-          toDelete.push(blob.url)
+          toDelete.push({ Key: obj.Key })
         }
       }
-      cursor = result.cursor
-    } while (cursor)
+      ContinuationToken = result.IsTruncated ? result.NextContinuationToken : undefined
+    } while (ContinuationToken)
 
-    if (toDelete.length > 0) {
-      await del(toDelete)
+    // S3 batch delete accepts up to 1000 keys per request.
+    for (let i = 0; i < toDelete.length; i += 1000) {
+      const batch = toDelete.slice(i, i + 1000)
+      await r2.send(
+        new DeleteObjectsCommand({
+          Bucket: BUCKET_NAME,
+          Delete: { Objects: batch },
+        }),
+      )
     }
 
     console.log("[v0] cleanup removed", toDelete.length, "files")

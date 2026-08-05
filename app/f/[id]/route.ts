@@ -1,5 +1,7 @@
+import { GetObjectCommand } from "@aws-sdk/client-s3"
 import { type NextRequest, NextResponse } from "next/server"
-import { displayNameFor, findBlobByShortId } from "@/lib/files"
+import { displayNameFor, findKeyByShortId } from "@/lib/files"
+import { r2, BUCKET_NAME } from "@/lib/r2"
 
 export const dynamic = "force-dynamic"
 
@@ -10,37 +12,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
 
   try {
-    const blob = await findBlobByShortId(decodeURIComponent(id))
-
-    if (!blob) {
+    const key = await findKeyByShortId(decodeURIComponent(id))
+    if (!key) {
       return new NextResponse("Not found", { status: 404 })
     }
 
-    const range = request.headers.get("range")
-    const upstream = await fetch(blob.url, {
-      headers: range ? { range } : {},
-    })
+    const range = request.headers.get("range") ?? undefined
+    const object = await r2.send(
+      new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key, Range: range }),
+    )
 
-    if (!upstream.ok && upstream.status !== 206) {
-      return new NextResponse("Not found", { status: 404 })
-    }
-
-    const displayName = displayNameFor(blob.pathname)
+    const displayName = displayNameFor(key)
 
     const headers = new Headers()
-    const contentType = upstream.headers.get("content-type") ?? "application/octet-stream"
-    headers.set("Content-Type", contentType)
+    headers.set("Content-Type", object.ContentType ?? "application/octet-stream")
     headers.set("Content-Disposition", `inline; filename="${encodeURIComponent(displayName)}"`)
     headers.set("Accept-Ranges", "bytes")
     headers.set("Cache-Control", "public, max-age=86400, immutable")
+    if (object.ContentLength) headers.set("Content-Length", String(object.ContentLength))
+    if (object.ContentRange) headers.set("Content-Range", object.ContentRange)
 
-    const contentLength = upstream.headers.get("content-length")
-    if (contentLength) headers.set("Content-Length", contentLength)
-    const contentRange = upstream.headers.get("content-range")
-    if (contentRange) headers.set("Content-Range", contentRange)
-
-    return new NextResponse(upstream.body, {
-      status: upstream.status,
+    return new NextResponse(object.Body as unknown as ReadableStream, {
+      status: range ? 206 : 200,
       headers,
     })
   } catch (error) {

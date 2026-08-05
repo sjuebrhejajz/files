@@ -3,10 +3,9 @@
 import type React from "react"
 
 import { useCallback, useRef, useState } from "react"
-import { upload } from "@vercel/blob/client"
 import { UploadCloud, Copy, Check, X, FileIcon, Loader2, ExternalLink } from "lucide-react"
 
-const MAX_BYTES = 100 * 1024 * 1024
+const MAX_BYTES = 250 * 1024 * 1024
 
 type UploadItem = {
   id: string
@@ -41,7 +40,7 @@ export function Uploader() {
 
     if (file.size > MAX_BYTES) {
       setItems((prev) => [
-        { id, name: file.name, size: file.size, status: "error", progress: 0, error: "Exceeds 100 MB limit" },
+        { id, name: file.name, size: file.size, status: "error", progress: 0, error: "Exceeds 250 MB limit" },
         ...prev,
       ])
       return
@@ -49,21 +48,38 @@ export function Uploader() {
 
     setItems((prev) => [{ id, name: file.name, size: file.size, status: "uploading", progress: 0 }, ...prev])
 
-    // Short id used to build a clean, shareable link (e.g. /f/aB3xQ9k)
-    // instead of exposing the full original filename in the URL.
-    const shortId = crypto.randomUUID().replace(/-/g, "").slice(0, 8)
-    // Timestamp + shortId + safe name so the cleanup cron can expire it after 12h.
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const pathname = `${Date.now()}__f__${shortId}__${safeName}`
-
     try {
-      await upload(pathname, file, {
-        access: "public",
-        handleUploadUrl: "/api/upload",
-        contentType: file.type || undefined,
-        onUploadProgress: (e) => {
-          setItems((prev) => prev.map((it) => (it.id === id ? { ...it, progress: e.percentage } : it)))
-        },
+      // Ask our API for a short-lived presigned PUT URL. The actual file
+      // bytes go straight from the browser to R2, never through Vercel —
+      // needed since files up to 250MB exceed Vercel's function body limits.
+      const presignRes = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
+      })
+
+      if (!presignRes.ok) {
+        const { error } = await presignRes.json().catch(() => ({ error: "Upload failed" }))
+        throw new Error(error || "Upload failed")
+      }
+
+      const { url, shortId } = (await presignRes.json()) as { url: string; shortId: string }
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open("PUT", url)
+        xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream")
+        xhr.upload.onprogress = (e) => {
+          if (!e.lengthComputable) return
+          const percentage = (e.loaded / e.total) * 100
+          setItems((prev) => prev.map((it) => (it.id === id ? { ...it, progress: percentage } : it)))
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve()
+          else reject(new Error(`Upload failed (${xhr.status})`))
+        }
+        xhr.onerror = () => reject(new Error("Upload failed"))
+        xhr.send(file)
       })
 
       const rawUrl = `${origin()}/f/${shortId}`
@@ -120,7 +136,7 @@ export function Uploader() {
         </div>
         <div className="space-y-1">
           <p className="text-base font-medium text-foreground">Drop files here or click to upload</p>
-          <p className="text-sm text-muted-foreground">Up to 100 MB per file &middot; auto-deleted after 12 hours</p>
+          <p className="text-sm text-muted-foreground">Up to 250 MB per file &middot; auto-deleted after 7 days</p>
         </div>
         <input
           ref={inputRef}

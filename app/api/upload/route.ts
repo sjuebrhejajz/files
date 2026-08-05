@@ -1,39 +1,46 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client"
+import { PutObjectCommand } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { type NextRequest, NextResponse } from "next/server"
+import { r2, BUCKET_NAME } from "@/lib/r2"
 
-// 100 MB per file
-const MAX_BYTES = 100 * 1024 * 1024
+// 250 MB per file
+const MAX_BYTES = 250 * 1024 * 1024
 
-// Allowed content types for direct inline embedding. We still accept anything,
-// but this list drives client-side hints. Keep broad so any file can be hosted.
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  const body = (await request.json()) as HandleUploadBody
-
+// Issues a short-lived presigned PUT URL so the browser can upload directly
+// to R2. Files up to 250MB can't be routed through a Vercel serverless
+// function (hard body-size limits), so the actual bytes never touch Vercel.
+export async function POST(request: NextRequest) {
   try {
-    const jsonResponse = await handleUpload({
-      body,
-      request,
-      onBeforeGenerateToken: async (pathname) => {
-        // Encode the upload time into the pathname so the cleanup cron can
-        // determine which files are older than 24h without a database.
-        // Final key looks like: 1712345678901__<random>__<originalname>
-        return {
-          // No restriction on file types — this is a general file host.
-          allowedContentTypes: undefined,
-          addRandomSuffix: true,
-          maximumSizeInBytes: MAX_BYTES,
-          tokenPayload: JSON.stringify({ pathname }),
-        }
-      },
-      onUploadCompleted: async ({ blob }) => {
-        // Nothing to persist — timestamped path handles expiry.
-        console.log("[v0] upload completed:", blob.pathname)
-      },
+    const { filename, contentType, size } = (await request.json()) as {
+      filename: string
+      contentType?: string
+      size: number
+    }
+
+    if (!filename || typeof size !== "number") {
+      return NextResponse.json({ error: "Missing filename or size" }, { status: 400 })
+    }
+
+    if (size > MAX_BYTES) {
+      return NextResponse.json({ error: "Exceeds 250 MB limit" }, { status: 400 })
+    }
+
+    const shortId = crypto.randomUUID().replace(/-/g, "").slice(0, 8)
+    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_")
+    // Timestamp + shortId + safe name so the cleanup cron can expire it after 7 days.
+    const key = `${Date.now()}__f__${shortId}__${safeName}`
+
+    const command = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      ContentType: contentType || "application/octet-stream",
     })
 
-    return NextResponse.json(jsonResponse)
+    const url = await getSignedUrl(r2, command, { expiresIn: 600 })
+
+    return NextResponse.json({ url, key, shortId })
   } catch (error) {
-    console.error("[v0] upload token error:", error)
-    return NextResponse.json({ error: (error as Error).message }, { status: 400 })
+    console.error("[v0] presign error:", error)
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
   }
 }

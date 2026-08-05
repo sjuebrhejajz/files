@@ -1,8 +1,8 @@
-import { list } from "@vercel/blob"
+import { ListObjectsV2Command, HeadObjectCommand } from "@aws-sdk/client-s3"
+import { r2, BUCKET_NAME } from "@/lib/r2"
 
 export type ResolvedFile = {
-  pathname: string
-  url: string
+  key: string
   displayName: string
   size: number
   contentType: string
@@ -17,53 +17,43 @@ function kindFor(contentType: string): ResolvedFile["kind"] {
   return "other"
 }
 
-export function displayNameFor(pathname: string) {
-  const name = pathname.split("/").pop() ?? pathname
+export function displayNameFor(key: string) {
+  const name = key.split("/").pop() ?? key
   // Strip the leading "timestamp__f__shortId__" prefix we add on upload.
-  let clean = name.replace(/^\d+__f__[^_]+__/, "")
-  // Strip Blob's appended random suffix before the extension, e.g.
-  // "clip-MwzVtRhXM4TA2YWKY9pgT81sxPirib.mp4" -> "clip.mp4".
-  clean = clean.replace(/-[A-Za-z0-9]{20,}(\.[^.]+)?$/, "$1")
-  return clean
+  return name.replace(/^\d+__f__[^_]+__/, "")
 }
 
-// Finds a blob by its short id (embedded in the pathname as
-// "<timestamp>__f__<shortId>__<name>"). Paginates through the store since
-// Blob has no direct key lookup by an arbitrary substring.
-export async function findBlobByShortId(shortId: string) {
-  let cursor: string | undefined
+// Finds an object by its short id (embedded in the key as
+// "<timestamp>__f__<shortId>__<name>"). Paginates through the bucket since R2
+// has no direct lookup by an arbitrary substring.
+export async function findKeyByShortId(shortId: string): Promise<string | null> {
+  let ContinuationToken: string | undefined
   do {
-    const result = await list({ cursor, limit: 1000 })
-    const match = result.blobs.find((b) => b.pathname.includes(`__${shortId}__`))
-    if (match) return match
-    cursor = result.cursor
-  } while (cursor)
+    const result = await r2.send(
+      new ListObjectsV2Command({ Bucket: BUCKET_NAME, ContinuationToken }),
+    )
+    const match = result.Contents?.find((o) => o.Key?.includes(`__${shortId}__`))
+    if (match?.Key) return match.Key
+    ContinuationToken = result.IsTruncated ? result.NextContinuationToken : undefined
+  } while (ContinuationToken)
   return null
 }
 
 export async function resolveFile(shortId: string): Promise<ResolvedFile | null> {
-  const blob = await findBlobByShortId(shortId)
-  if (!blob) return null
+  const key = await findKeyByShortId(shortId)
+  if (!key) return null
 
-  // Fetch a HEAD-ish request to learn the content type.
-  let contentType = "application/octet-stream"
-  try {
-    const head = await fetch(blob.url, { method: "HEAD" })
-    contentType = head.headers.get("content-type") ?? contentType
-  } catch {
-    // ignore
-  }
-
-  const name = blob.pathname.split("/").pop() ?? ""
+  const head = await r2.send(new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: key }))
+  const contentType = head.ContentType ?? "application/octet-stream"
+  const name = key.split("/").pop() ?? ""
   const tsMatch = name.match(/^(\d+)__/)
 
   return {
-    pathname: blob.pathname,
-    url: blob.url,
-    displayName: displayNameFor(blob.pathname),
-    size: blob.size,
+    key,
+    displayName: displayNameFor(key),
+    size: head.ContentLength ?? 0,
     contentType,
-    uploadedAt: tsMatch ? Number(tsMatch[1]) : new Date(blob.uploadedAt).getTime(),
+    uploadedAt: tsMatch ? Number(tsMatch[1]) : (head.LastModified?.getTime() ?? Date.now()),
     kind: kindFor(contentType),
   }
 }

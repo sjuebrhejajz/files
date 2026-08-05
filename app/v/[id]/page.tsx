@@ -22,8 +22,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!file) return { title: "File not found" }
 
   const base = await siteUrl()
-  const rawUrl = `${base}/f/${encodeURIComponent(file.pathname)}`
-  const pageUrl = `${base}/v/${encodeURIComponent(file.pathname)}`
+  const rawUrl = `${base}/f/${id}`
+  const pageUrl = `${base}/v/${id}`
 
   // OpenGraph tags let Discord unfurl a rich inline player instead of a plain link.
   if (file.kind === "video") {
@@ -73,6 +73,6 @@ export default async function ViewerPage({ params }: Props) {
   const file = await resolveFile(id)
   if (!file) notFound()
 
-  const rawUrl = `/f/${encodeURIComponent(file.pathname)}`
+  const rawUrl = `/f/${id}`
   return <FileViewer file={file} rawUrl={rawUrl} />
 }
