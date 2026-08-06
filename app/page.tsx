@@ -1,5 +1,6 @@
 import { Uploader } from "@/components/uploader"
 import { PresenceBadge } from "@/components/presence-badge"
+import { DonateBox } from "@/components/donate-box"
 import { Clock, ShieldCheck, Zap, Lock } from "lucide-react"
 
 export default function Page() {
@@ -20,6 +21,8 @@ export default function Page() {
       </header>
 
       <Uploader />
+
+      <DonateBox />
 
       <ul className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Feature
