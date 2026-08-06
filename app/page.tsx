@@ -31,7 +31,7 @@ export default function Page() {
         <Feature
           icon={<Clock className="size-4" />}
           title="7-day expiry"
-          desc="Everything auto-deletes daily."
+          desc="Files are removed exactly 7 days after upload."
           delay={75}
         />
         <Feature
