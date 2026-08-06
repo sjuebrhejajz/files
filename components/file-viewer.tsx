@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Download, ArrowLeft } from "lucide-react"
+import { Download, ArrowLeft, Lock, Clock } from "lucide-react"
 import type { ResolvedFile } from "@/lib/files"
 
 function formatSize(bytes: number) {
@@ -25,14 +25,14 @@ export function FileViewer({ file, rawUrl }: { file: ResolvedFile; rawUrl: strin
         <a
           href={rawUrl}
           download={file.displayName}
-          className="inline-flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-accent"
+          className="inline-flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-all duration-150 hover:bg-accent hover:scale-[1.03] active:scale-95"
         >
           <Download className="size-4" />
           Download
         </a>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="animate-in fade-in zoom-in-95 duration-300 overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-lg hover:shadow-black/20">
         <div className="flex items-center justify-center bg-black/40 p-2">
           {file.kind === "video" && (
             <video
@@ -68,7 +68,16 @@ export function FileViewer({ file, rawUrl }: { file: ResolvedFile; rawUrl: strin
         </div>
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">This file is automatically deleted 12 hours after upload.</p>
+      <div className="animate-in fade-in duration-500 flex items-center justify-center gap-4 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <Clock className="size-3.5" />
+          Deletes 7 days after upload
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Lock className="size-3.5" />
+          Encrypted in transit &amp; at rest
+        </span>
+      </div>
     </main>
   )
 }

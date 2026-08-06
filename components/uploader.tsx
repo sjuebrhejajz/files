@@ -172,7 +172,7 @@ function UploadRow({ item, onRemove }: { item: UploadItem; onRemove: () => void 
   }
 
   return (
-    <li className="rounded-xl border border-border bg-card p-4">
+    <li className="animate-in fade-in slide-in-from-top-2 duration-300 rounded-xl border border-border bg-card p-4">
       <div className="flex items-center gap-3">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
           {item.status === "uploading" ? (
@@ -211,7 +211,7 @@ function UploadRow({ item, onRemove }: { item: UploadItem; onRemove: () => void 
       )}
 
       {item.status === "done" && item.rawUrl && (
-        <div className="mt-3 flex items-center gap-2">
+        <div className="animate-in fade-in slide-in-from-top-1 duration-300 mt-3 flex items-center gap-2">
           <input
             readOnly
             value={item.rawUrl}
