@@ -1,40 +1,50 @@
 import { NextResponse } from "next/server"
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
+import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { requireCurrentUser, AuthError } from "@/lib/auth"
+import { r2, BUCKET_NAME } from "@/lib/r2"
 
-// Reuses the same S3-compatible (R2) bucket/credentials the file uploader already uses.
-const s3 = new S3Client({
-  region: "auto",
-  endpoint: process.env.S3_ENDPOINT, // e.g. https://<accountid>.r2.cloudflarestorage.com
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID as string,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY as string,
-  },
-})
-
-const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"])
+// Any image/* content type is accepted (png, jpeg, webp, gif, svg, heic, avif, etc).
+// Anything that isn't an image — video, audio, whatever — is rejected outright.
+const EXT_BY_TYPE: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/svg+xml": "svg",
+  "image/bmp": "bmp",
+  "image/x-icon": "ico",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "image/avif": "avif",
+  "image/tiff": "tiff",
+}
 
 export async function POST(req: Request) {
   try {
     const user = await requireCurrentUser()
     const body = await req.json()
     const contentType = String(body.contentType ?? "")
-    if (!ALLOWED_TYPES.has(contentType)) {
-      return NextResponse.json({ error: "Unsupported image type." }, { status: 400 })
+
+    if (!contentType.startsWith("image/")) {
+      return NextResponse.json({ error: "Only image files are allowed." }, { status: 400 })
     }
 
-    const ext = contentType.split("/")[1]
+    const ext = EXT_BY_TYPE[contentType] ?? contentType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") ?? "bin"
+    // Reuses the same R2 bucket/credentials the file uploader already uses — no separate
+    // S3_* env vars needed. Namespaced under avatars/ so the cleanup cron can skip these.
     const key = `avatars/${user.id}-${Date.now()}.${ext}`
-    const bucket = process.env.S3_BUCKET as string
 
     const uploadUrl = await getSignedUrl(
-      s3,
-      new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
+      r2,
+      new PutObjectCommand({ Bucket: BUCKET_NAME, Key: key, ContentType: contentType }),
       { expiresIn: 60 * 5 },
     )
 
-    const publicUrl = `${process.env.S3_PUBLIC_BASE_URL}/${key}`
+    // Served through our own proxy route since the bucket is private (same reason
+    // uploaded files go through /f/[id] instead of a public bucket URL).
+    const publicUrl = `/a/${key}`
 
     return NextResponse.json({ uploadUrl, publicUrl })
   } catch (err) {

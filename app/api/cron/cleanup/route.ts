@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
       )
       for (const obj of result.Contents ?? []) {
         if (!obj.Key) continue
+        // Profile pictures don't expire — only files uploaded through the main uploader do.
+        if (obj.Key.startsWith("avatars/")) continue
         const name = obj.Key.split("/").pop() ?? ""
         const tsMatch = name.match(/^(\d+)__/)
         const uploadedAt = tsMatch ? Number(tsMatch[1]) : (obj.LastModified?.getTime() ?? now)
