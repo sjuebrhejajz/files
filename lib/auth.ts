@@ -16,7 +16,6 @@ export type PublicUser = {
   username: string
   profile_picture_url: string | null
   two_fa_enabled: boolean
-  phone_verified: boolean
   created_at: string
 }
 
@@ -78,7 +77,7 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
   if (!token) return null
 
   const rows = await sql`
-    select u.id, u.email, u.username, u.profile_picture_url, u.two_fa_enabled, u.phone_verified, u.created_at
+    select u.id, u.email, u.username, u.profile_picture_url, u.two_fa_enabled, u.created_at
     from sessions s
     join users u on u.id = s.user_id
     where s.token_hash = ${sha256(token)} and s.expires_at > now()

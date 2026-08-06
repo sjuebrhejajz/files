@@ -86,3 +86,6 @@ create index if not exists idx_sessions_token on sessions(token_hash);
 create index if not exists idx_verification_codes_lookup on verification_codes(user_id, purpose);
 create index if not exists idx_uploads_user on uploads(user_id);
 create index if not exists idx_uploads_short_id on uploads(short_id);
+
+-- TOTP (authenticator app) 2FA. Run this if your users table predates this migration:
+alter table users add column if not exists two_fa_secret text;

@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { verifyPassword, createSession, isDeviceTrusted } from "@/lib/auth"
-import { createUserCode } from "@/lib/codes"
-import { sendSmsCode } from "@/lib/sms"
 import { createLoginTicket } from "@/lib/ticket"
 
 export async function POST(req: Request) {
@@ -17,7 +15,7 @@ export async function POST(req: Request) {
     }
 
     const rows = await sql`
-      select id, password_hash, two_fa_enabled, phone_number
+      select id, password_hash, two_fa_enabled
       from users
       where email = ${identifier} or lower(username) = ${identifier}
     `
@@ -33,8 +31,7 @@ export async function POST(req: Request) {
     if (user.two_fa_enabled) {
       const trusted = await isDeviceTrusted(user.id)
       if (!trusted) {
-        const code = await createUserCode(user.id, "login_2fa")
-        await sendSmsCode(user.phone_number as string, code)
+        // No code to send — the user reads it straight off their authenticator app.
         const ticket = createLoginTicket(user.id)
         return NextResponse.json({ requires2fa: true, ticket })
       }

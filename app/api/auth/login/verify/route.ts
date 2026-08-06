@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
+import { sql } from "@/lib/db"
 import { codeSchema } from "@/lib/validators"
-import { verifyUserCode } from "@/lib/codes"
+import { verifyTotpToken } from "@/lib/totp"
 import { createSession, markDeviceTrusted } from "@/lib/auth"
 import { verifyLoginTicket } from "@/lib/ticket"
 
@@ -16,8 +17,11 @@ export async function POST(req: Request) {
     const claim = verifyLoginTicket(ticket)
     if (!claim) return NextResponse.json({ error: "This login attempt expired. Please log in again." }, { status: 401 })
 
-    const check = await verifyUserCode(claim.userId, "login_2fa", code.data)
-    if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 400 })
+    const rows = await sql`select two_fa_secret from users where id = ${claim.userId}`
+    const secret = rows[0]?.two_fa_secret as string | null
+    if (!secret || !verifyTotpToken(code.data, secret)) {
+      return NextResponse.json({ error: "Incorrect code." }, { status: 400 })
+    }
 
     await createSession(claim.userId, remember)
     if (remember) await markDeviceTrusted(claim.userId)

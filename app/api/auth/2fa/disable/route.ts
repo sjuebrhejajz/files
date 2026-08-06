@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     const valid = await verifyPassword(password, rows[0].password_hash)
     if (!valid) return NextResponse.json({ error: "Incorrect password." }, { status: 401 })
 
-    await sql`update users set two_fa_enabled = false where id = ${user.id}`
+    await sql`update users set two_fa_enabled = false, two_fa_secret = null where id = ${user.id}`
     return NextResponse.json({ ok: true })
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status })

@@ -256,20 +256,22 @@ function PasswordSection() {
 function TwoFactorSection({ user }: { user: PublicUser }) {
   const [enabled, setEnabled] = useState(user.two_fa_enabled)
   const [step, setStep] = useState<"idle" | "code" | "disable">("idle")
-  const [phoneNumber, setPhoneNumber] = useState("")
+  const [qrCode, setQrCode] = useState<string | null>(null)
+  const [secret, setSecret] = useState<string | null>(null)
   const [code, setCode] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
 
-  const sendSetupCode = async () => {
+  const startSetup = async () => {
     setLoading(true)
     setError(null)
     setInfo(null)
     try {
-      await call("/api/auth/2fa/setup", { phoneNumber })
-      setInfo(`Code texted to ${phoneNumber}.`)
+      const data = await call("/api/auth/2fa/setup", {})
+      setQrCode(data.qrCode)
+      setSecret(data.secret)
       setStep("code")
     } catch (err) {
       setError((err as Error).message)
@@ -285,6 +287,9 @@ function TwoFactorSection({ user }: { user: PublicUser }) {
       await call("/api/auth/2fa/verify", { code })
       setEnabled(true)
       setStep("idle")
+      setQrCode(null)
+      setSecret(null)
+      setCode("")
       setInfo("Two-factor authentication enabled.")
     } catch (err) {
       setError((err as Error).message)
@@ -330,14 +335,27 @@ function TwoFactorSection({ user }: { user: PublicUser }) {
           )}
         </div>
       ) : step === "idle" ? (
-        <div className="flex gap-2">
-          <Input placeholder="+14155552671" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
-          <Button onClick={sendSetupCode} loading={loading} label="Enable" />
+        <div>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Use an authenticator app (Google Authenticator, Authy, 1Password, etc.) to generate login codes.
+          </p>
+          <Button onClick={startSetup} loading={loading} label="Enable" />
         </div>
       ) : (
-        <div className="flex gap-2">
-          <Input placeholder="6-digit code" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
-          <Button onClick={confirmSetup} loading={loading} label="Confirm" />
+        <div className="flex flex-col gap-3">
+          {qrCode && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qrCode} alt="Scan this QR code with your authenticator app" className="size-40 rounded-md border border-border" />
+          )}
+          {secret && (
+            <p className="break-all text-xs text-muted-foreground">
+              Can&apos;t scan? Enter this key manually: <span className="font-mono text-foreground">{secret}</span>
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Input placeholder="6-digit code" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+            <Button onClick={confirmSetup} loading={loading} label="Confirm" />
+          </div>
         </div>
       )}
     </Section>

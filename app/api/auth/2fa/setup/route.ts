@@ -1,23 +1,22 @@
 import { NextResponse } from "next/server"
+import { sql } from "@/lib/db"
 import { requireCurrentUser, AuthError } from "@/lib/auth"
-import { phoneSchema } from "@/lib/validators"
-import { createUserCode } from "@/lib/codes"
-import { sendSmsCode } from "@/lib/sms"
+import { generateTotpSecret, generateTotpQrCode } from "@/lib/totp"
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
     const user = await requireCurrentUser()
-    const body = await req.json()
-    const parsed = phoneSchema.safeParse(body.phoneNumber)
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+    const secret = generateTotpSecret()
 
-    const code = await createUserCode(user.id, "phone_2fa", parsed.data, { phoneNumber: parsed.data })
-    await sendSmsCode(parsed.data, code)
+    // Store the secret but leave 2FA disabled until the user confirms a code from their app.
+    await sql`update users set two_fa_secret = ${secret}, two_fa_enabled = false where id = ${user.id}`
 
-    return NextResponse.json({ ok: true })
+    const qrCode = await generateTotpQrCode(user.email, secret)
+
+    return NextResponse.json({ ok: true, qrCode, secret })
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status })
     console.error("[2fa/setup]", err)
-    return NextResponse.json({ error: "Could not send code." }, { status: 500 })
+    return NextResponse.json({ error: "Could not start 2FA setup." }, { status: 500 })
   }
 }

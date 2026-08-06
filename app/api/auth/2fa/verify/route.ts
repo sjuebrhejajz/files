@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { requireCurrentUser, AuthError } from "@/lib/auth"
 import { codeSchema } from "@/lib/validators"
-import { verifyUserCode } from "@/lib/codes"
+import { verifyTotpToken } from "@/lib/totp"
 
 export async function POST(req: Request) {
   try {
@@ -11,17 +11,14 @@ export async function POST(req: Request) {
     const parsed = codeSchema.safeParse(body.code)
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
 
-    const check = await verifyUserCode(user.id, "phone_2fa", parsed.data)
-    if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 400 })
+    const rows = await sql`select two_fa_secret from users where id = ${user.id}`
+    const secret = rows[0]?.two_fa_secret as string | null
+    if (!secret) return NextResponse.json({ error: "Start 2FA setup first." }, { status: 400 })
 
-    const phoneNumber = (check.metadata?.phoneNumber as string | undefined) ?? check.destination
-    if (!phoneNumber) return NextResponse.json({ error: "Missing phone number, restart setup." }, { status: 400 })
+    const valid = verifyTotpToken(parsed.data, secret)
+    if (!valid) return NextResponse.json({ error: "Incorrect code." }, { status: 400 })
 
-    await sql`
-      update users
-      set phone_number = ${phoneNumber}, phone_verified = true, two_fa_enabled = true
-      where id = ${user.id}
-    `
+    await sql`update users set two_fa_enabled = true where id = ${user.id}`
 
     return NextResponse.json({ ok: true })
   } catch (err) {
