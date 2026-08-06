@@ -1,11 +1,13 @@
 import { Uploader } from "@/components/uploader"
 import { PresenceBadge } from "@/components/presence-badge"
 import { DonateBox } from "@/components/donate-box"
+import { UserMenu } from "@/components/auth/user-menu"
 import { Clock, ShieldCheck, Zap, Lock } from "lucide-react"
 
 export default function Page() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10">
+      <UserMenu />
       <header className="animate-in fade-in slide-in-from-top-2 duration-500 mb-10 flex flex-col items-center gap-3 text-center">
         <div className="flex items-center gap-2">
           <span className="relative inline-flex size-2.5">

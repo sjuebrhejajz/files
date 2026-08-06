@@ -2,9 +2,12 @@ import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { type NextRequest, NextResponse } from "next/server"
 import { r2, BUCKET_NAME } from "@/lib/r2"
+import { sql } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth"
 
 // 250 MB per file
 const MAX_BYTES = 250 * 1024 * 1024
+const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
 
 // Issues a short-lived presigned PUT URL so the browser can upload directly
 // to R2. Files up to 250MB can't be routed through a Vercel serverless
@@ -37,6 +40,18 @@ export async function POST(request: NextRequest) {
     })
 
     const url = await getSignedUrl(r2, command, { expiresIn: 600 })
+
+    // Record the upload so it's attributable to an account (if logged in) and
+    // so the dashboard can list/delete it without scanning the whole bucket.
+    // This row is written optimistically at presign time, before the browser's
+    // PUT actually completes — same assumption the cleanup cron already makes
+    // by trusting the timestamp embedded in the object key.
+    const user = await getCurrentUser()
+    const expiresAt = new Date(Date.now() + EXPIRY_MS)
+    await sql`
+      insert into uploads (user_id, short_id, object_key, filename, content_type, size_bytes, expires_at)
+      values (${user?.id ?? null}, ${shortId}, ${key}, ${filename}, ${contentType ?? null}, ${size}, ${expiresAt.toISOString()})
+    `
 
     return NextResponse.json({ url, key, shortId })
   } catch (error) {

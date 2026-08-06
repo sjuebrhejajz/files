@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import Stripe from "stripe"
+import { getCurrentUser } from "@/lib/auth"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 
@@ -16,9 +17,13 @@ export async function POST(req: Request) {
 
     const origin = req.headers.get("origin") || new URL(req.url).origin
 
+    // Attach the logged-in user's id (if any) so the webhook can credit the leaderboard.
+    const user = await getCurrentUser()
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
+      metadata: user ? { userId: user.id } : undefined,
       line_items: [
         {
           price_data: {

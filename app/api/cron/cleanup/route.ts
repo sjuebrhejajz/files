@@ -1,6 +1,7 @@
 import { ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3"
 import { type NextRequest, NextResponse } from "next/server"
 import { r2, BUCKET_NAME } from "@/lib/r2"
+import { sql } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
@@ -45,6 +46,13 @@ export async function GET(request: NextRequest) {
           Delete: { Objects: batch },
         }),
       )
+    }
+
+    // Keep the "uploads" table (used by each user's dashboard) in sync with what's
+    // actually still in the bucket.
+    if (toDelete.length > 0) {
+      const keys = toDelete.map((o) => o.Key)
+      await sql`delete from uploads where object_key = any(${keys})`
     }
 
     console.log("[v0] cleanup removed", toDelete.length, "files")
