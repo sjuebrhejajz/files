@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Loader2, ShieldCheck, ShieldOff } from "lucide-react"
 import type { PublicUser } from "@/lib/auth"
+import { useTheme } from "@/components/theme-provider"
 
 async function call(url: string, body: unknown, method: "POST" | "PATCH" = "POST") {
   const res = await fetch(url, {
@@ -297,7 +298,11 @@ function MusicSection() {
 
   const onFile = async (file: File) => {
     setError(null)
-    if (file.type !== "audio/mpeg" && file.type !== "audio/mp3") {
+    // file.type is unreliable for MP3s on some Android browsers/pickers (often
+    // comes back empty or non-standard), which was silently rejecting valid
+    // files here. Extension is a much more reliable signal for this one format.
+    const looksLikeMp3 = file.name.toLowerCase().endsWith(".mp3") || file.type === "audio/mpeg" || file.type === "audio/mp3"
+    if (!looksLikeMp3) {
       setError("Only MP3 files are allowed.")
       return
     }
@@ -305,10 +310,13 @@ function MusicSection() {
       setError("Track must be 15 MB or smaller.")
       return
     }
+    // Normalize to a single canonical type — used for both the presign request
+    // and the actual PUT header below, so they always match.
+    const contentType = "audio/mpeg"
     setLoading(true)
     try {
-      const { uploadUrl, key } = await call("/api/user/settings/music-url", { contentType: file.type, size: file.size })
-      const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": "audio/mpeg" } })
+      const { uploadUrl, key } = await call("/api/user/settings/music-url", { contentType, size: file.size })
+      const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": contentType } })
       if (!put.ok) throw new Error("Upload failed.")
       await call("/api/user/settings/music", { key })
       setStatus((s) => (s ? { ...s, url: `/a/${key}` } : s))
@@ -389,6 +397,7 @@ function MusicSection() {
 const MAX_THEME_IMAGE_BYTES = 25 * 1024 * 1024 // 25 MB
 
 function ThemeSection() {
+  const { setTheme } = useTheme()
   const [status, setStatus] = useState<{
     eligible: boolean
     mode: "default" | "color" | "image"
@@ -429,6 +438,7 @@ function ThemeSection() {
     try {
       await call("/api/user/settings/theme", { mode: "default" })
       setStatus((s) => (s ? { ...s, mode: "default", hasImage: false } : s))
+      setTheme({ mode: "default" })
       setInfo("Reset to the default theme.")
     } catch (err) {
       setError((err as Error).message)
@@ -444,6 +454,7 @@ function ThemeSection() {
     try {
       await call("/api/user/settings/theme", { mode: "color", color })
       setStatus((s) => (s ? { ...s, mode: "color", color } : s))
+      setTheme({ mode: "color", color })
       setInfo("Theme color updated.")
     } catch (err) {
       setError((err as Error).message)
@@ -473,6 +484,7 @@ function ThemeSection() {
       if (!put.ok) throw new Error("Upload failed.")
       await call("/api/user/settings/theme", { mode: "image", key })
       setStatus((s) => (s ? { ...s, mode: "image", hasImage: true } : s))
+      setTheme({ mode: "image", imageUrl: `/a/${key}` })
       setInfo("Theme background updated.")
     } catch (err) {
       setError((err as Error).message)

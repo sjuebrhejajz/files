@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { getCurrentUser } from '@/lib/auth'
 import { getUserTheme } from '@/lib/theme'
+import { ThemeProvider, type ClientTheme } from '@/components/theme-provider'
 
 export const metadata: Metadata = {
   title: 'files.uncertain.uk',
@@ -38,28 +39,27 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   const user = await getCurrentUser()
-  const theme = user ? await getUserTheme(user.id) : { mode: 'default' as const }
+  // Root layouts don't re-run on client-side navigation in the App Router, so
+  // a theme saved in Settings would never visually apply until a hard reload
+  // if this were the only place it got rendered. ThemeProvider is a client
+  // component that owns the actual styling and can update reactively — this
+  // just supplies its starting value so the very first paint is already
+  // correct (no flash of the default theme before JS runs).
+  const dbTheme = user ? await getUserTheme(user.id) : { mode: 'default' as const }
+  const initial: ClientTheme =
+    dbTheme.mode === 'color'
+      ? { mode: 'color', color: dbTheme.color }
+      : dbTheme.mode === 'image'
+        ? { mode: 'image', imageUrl: dbTheme.imageUrl }
+        : { mode: 'default' }
 
   return (
     <html lang="en" className="dark bg-background">
       <body className="antialiased">
-        {theme.mode === 'color' && (
-          // theme.color is validated against a strict 6-digit hex pattern in
-          // lib/theme.ts before it ever reaches here, so this is safe to inline
-          // as plain text (no dangerouslySetInnerHTML needed).
-          <style>{`:root { --primary: ${theme.color}; --ring: ${theme.color}; --sidebar-primary: ${theme.color}; }`}</style>
-        )}
-        {theme.mode === 'image' && (
-          <div
-            aria-hidden
-            className="fixed inset-0 -z-10 bg-cover bg-center"
-            style={{ backgroundImage: `url(${theme.imageUrl})` }}
-          >
-            <div className="absolute inset-0 bg-background/85" />
-          </div>
-        )}
-        {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        <ThemeProvider initial={initial}>
+          {children}
+          {process.env.NODE_ENV === 'production' && <Analytics />}
+        </ThemeProvider>
       </body>
     </html>
   )

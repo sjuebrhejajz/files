@@ -18,6 +18,11 @@ export default async function PublicProfilePage({ params }: Props) {
   const profile = await getPublicProfile(username)
   if (!profile) notFound()
 
+  const memberSince = new Date(profile.created_at).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  })
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 lg:max-w-4xl">
       <div className="mb-6 overflow-hidden rounded-xl border border-border bg-card">
@@ -27,6 +32,9 @@ export default async function PublicProfilePage({ params }: Props) {
         ) : (
           <div className="h-24 w-full bg-secondary lg:h-32" />
         )}
+        {/* This row overlaps the banner via -mt-8, so it must stay exactly one
+            line tall — anything else (like the donator badge) belongs in the
+            section below instead, or it visually rides up over the banner. */}
         <div className="-mt-8 flex items-end gap-4 px-5">
           {profile.profile_picture_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -40,21 +48,29 @@ export default async function PublicProfilePage({ params }: Props) {
               {profile.username.slice(0, 1).toUpperCase()}
             </div>
           )}
-          <div className="flex flex-col gap-1 pb-1">
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-lg font-semibold text-foreground">{profile.username}</h1>
-              <RoleBadge role={profile.role} />
-            </div>
-            {profile.is_donator && (
-              <div className="flex items-center gap-1.5">
-                <DonatorBadge />
-                <span className="text-[11px] text-muted-foreground">Donator</span>
-              </div>
-            )}
+          <div className="flex items-center gap-1.5 pb-1">
+            <h1 className="text-lg font-semibold text-foreground">{profile.username}</h1>
+            <RoleBadge role={profile.role} />
           </div>
         </div>
 
         <div className="px-5 pb-5 pt-3">
+          {profile.is_donator && (
+            <div className="mb-2 flex items-center gap-1.5">
+              <DonatorBadge />
+              <span className="text-[11px] text-muted-foreground">Donator</span>
+            </div>
+          )}
+
+          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            <span>Member since {memberSince}</span>
+            {profile.links !== null && (
+              <span>
+                {profile.links.length} link{profile.links.length === 1 ? "" : "s"} shared
+              </span>
+            )}
+          </div>
+
           {profile.bio && <p className="whitespace-pre-wrap text-sm text-foreground">{profile.bio}</p>}
           {profile.music_enabled && profile.music_url && (
             // Autoplay-with-sound is blocked by most browsers until the visitor
@@ -66,23 +82,64 @@ export default async function PublicProfilePage({ params }: Props) {
         </div>
       </div>
 
-      <h2 className="mb-3 text-sm font-medium text-foreground">Links</h2>
-      {profile.links === null ? (
-        <p className="text-xs text-muted-foreground">User disabled viewing.</p>
-      ) : profile.links.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No active links.</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {profile.links.map((link) => (
-            <li key={link.url} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
-              <span className="truncate text-sm text-foreground">{link.filename}</span>
-              <a href={link.url} className="shrink-0 text-xs text-primary hover:underline">
-                {link.url}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_260px]">
+        <div>
+          <h2 className="mb-3 text-sm font-medium text-foreground">Links</h2>
+          {profile.links === null ? (
+            <p className="text-xs text-muted-foreground">User disabled viewing.</p>
+          ) : profile.links.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No active links.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {profile.links.map((link) => (
+                <li
+                  key={link.url}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
+                >
+                  <span className="truncate text-sm text-foreground">{link.filename}</span>
+                  <a href={link.url} className="shrink-0 text-xs text-primary hover:underline">
+                    {link.url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Desktop-only sidebar — keeps the wider lg: layout from looking sparse
+            next to a short bio and a handful of links. */}
+        <aside className="hidden flex-col gap-4 lg:flex">
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="mb-2 text-xs font-medium text-foreground">About this profile</h3>
+            <dl className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+              <div className="flex justify-between gap-3">
+                <dt>Member since</dt>
+                <dd className="text-foreground">{memberSince}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Role</dt>
+                <dd className="text-foreground capitalize">{profile.role}</dd>
+              </div>
+              {profile.links !== null && (
+                <div className="flex justify-between gap-3">
+                  <dt>Shared links</dt>
+                  <dd className="text-foreground">{profile.links.length}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+
+          <a
+            href="/"
+            className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
+          >
+            <h3 className="mb-1 text-xs font-medium text-foreground">Get your own profile</h3>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Upload a file on files.uncertain.uk to create an account and claim your own public page.
+            </p>
+          </a>
+        </aside>
+      </div>
     </main>
   )
 }

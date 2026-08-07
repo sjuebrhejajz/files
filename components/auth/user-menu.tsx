@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { User, ChevronDown, LayoutDashboard, Settings, LogOut } from "lucide-react"
+import { User, ChevronDown, LayoutDashboard, Settings, LogOut, Users } from "lucide-react"
 import { AuthModal } from "./auth-modal"
 import type { PublicUser } from "@/lib/auth"
 
@@ -39,7 +39,7 @@ export function UserMenu() {
   }
 
   return (
-    <div className="fixed right-3 top-3 z-40 sm:right-5 sm:top-5">
+    <div className="fixed right-3 top-3 z-40 flex flex-col items-end gap-2 sm:right-5 sm:top-5 sm:flex-row sm:items-center">
       {user === "loading" ? (
         <div className="h-9 w-9 animate-pulse rounded-full bg-secondary sm:w-24" />
       ) : user ? (
@@ -106,6 +106,13 @@ export function UserMenu() {
           />
         </>
       )}
+      <Link
+        href="/users"
+        className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/40 sm:text-sm"
+      >
+        <Users className="size-3.5" />
+        Users
+      </Link>
     </div>
   )
 }

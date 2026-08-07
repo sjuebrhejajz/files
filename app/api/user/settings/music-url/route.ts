@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
     const uploadUrl = await getSignedUrl(
       r2,
-      new PutObjectCommand({ Bucket: BUCKET_NAME, Key: key, ContentType: "audio/mpeg" }),
+      new PutObjectCommand({ Bucket: BUCKET_NAME, Key: key, ContentType: contentType }),
       { expiresIn: 60 * 5 },
     )
 
