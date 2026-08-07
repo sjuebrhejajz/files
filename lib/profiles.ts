@@ -20,6 +20,11 @@ export type PublicProfile = {
   music_url: string | null
   music_enabled: boolean
   music_title: string | null
+  // Admin-only full-page background video. Always played muted client-side —
+  // see components/profile-video-background.tsx — the source file itself
+  // should have no audio track (stripped before upload).
+  video_url: string | null
+  video_enabled: boolean
   discord_username: string | null
   discord_avatar_url: string | null
   // null = owner has links_public off ("User disabled viewing" on the profile page)
@@ -29,7 +34,8 @@ export type PublicProfile = {
 export async function getPublicProfile(username: string): Promise<PublicProfile | null> {
   const rows = await sql`
     select id, username, profile_picture_url, banner_url, role, is_donator, bio, links_public, created_at,
-           music_object_key, music_enabled, music_title, discord_username, discord_avatar_url
+           music_object_key, music_enabled, music_title, video_object_key, video_enabled,
+           discord_username, discord_avatar_url
     from users
     where lower(username) = ${username.toLowerCase()}
   `
@@ -65,6 +71,8 @@ export async function getPublicProfile(username: string): Promise<PublicProfile 
     music_url: row.music_object_key ? `/a/${row.music_object_key}` : null,
     music_enabled: Boolean(row.music_enabled),
     music_title: row.music_title,
+    video_url: row.video_object_key ? `/a/${row.video_object_key}` : null,
+    video_enabled: Boolean(row.video_enabled),
     discord_username: row.discord_username,
     discord_avatar_url: row.discord_avatar_url,
     links,

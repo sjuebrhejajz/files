@@ -202,3 +202,9 @@ create unique index if not exists idx_users_discord_id on users(discord_id) wher
 -- Optional display name for the profile music track, shown instead of the
 -- generic "Profile music" label. Purely cosmetic — no validation beyond length.
 alter table users add column if not exists music_title text;
+
+-- Admin-only full-page background video for a profile. Silent by design —
+-- the app always renders it muted regardless of the source file, and the
+-- settings UI only exposes this section to role = 'admin'.
+alter table users add column if not exists video_object_key text;
+alter table users add column if not exists video_enabled boolean not null default false;

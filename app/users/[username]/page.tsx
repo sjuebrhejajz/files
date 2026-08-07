@@ -1,10 +1,12 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { MessageCircle, Play, FileIcon } from "lucide-react"
+import { MessageCircle } from "lucide-react"
 import { getPublicProfile } from "@/lib/profiles"
 import { RoleBadge } from "@/components/role-badge"
 import { DonatorBadge } from "@/components/donator-badge"
 import { ProfileAudioPlayer } from "@/components/profile-audio-player"
+import { LinkPreview } from "@/components/link-preview"
+import { ProfileVideoBackground } from "@/components/profile-video-background"
 
 type Props = { params: Promise<{ username: string }> }
 
@@ -25,9 +27,17 @@ export default async function PublicProfilePage({ params }: Props) {
     year: "numeric",
   })
 
+  // The video background is opt-in per profile (currently admin-only, see
+  // lib/profiles.ts) and is always rendered muted — any sound comes from the
+  // separate music widget above, never from the background video itself.
+  const hasVideoBackground = profile.video_enabled && Boolean(profile.video_url)
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 lg:max-w-4xl">
-      <div className="mb-4 overflow-hidden rounded-xl border border-border bg-card">
+    <main className="relative mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 lg:max-w-4xl">
+      {hasVideoBackground && <ProfileVideoBackground src={profile.video_url as string} />}
+      <div
+        className={`mb-4 overflow-hidden rounded-xl border border-border bg-card ${hasVideoBackground ? "backdrop-blur-sm bg-card/80" : ""}`}
+      >
         {profile.banner_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={profile.banner_url} alt="" className="h-32 w-full object-cover lg:h-48" />
@@ -170,39 +180,5 @@ export default async function PublicProfilePage({ params }: Props) {
         </aside>
       </div>
     </main>
-  )
-}
-
-function LinkPreview({ url, contentType }: { url: string; contentType: string | null }) {
-  const isImage = contentType?.startsWith("image/") ?? false
-  const isVideo = contentType?.startsWith("video/") ?? false
-
-  if (isImage) {
-    return (
-      <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt="" className="size-full object-cover" />
-      </div>
-    )
-  }
-
-  if (isVideo) {
-    return (
-      <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary">
-        {/* preload="metadata" only grabs a frame for the thumbnail — it never
-            autoplays here, so a page with many video links doesn't turn into
-            several videos playing at once. */}
-        <video src={url} muted playsInline preload="metadata" className="size-full object-cover" />
-        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
-          <Play className="size-3.5 fill-white text-white" />
-        </span>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex size-12 shrink-0 items-center justify-center rounded-md bg-secondary">
-      <FileIcon className="size-4 text-muted-foreground" />
-    </div>
   )
 }
