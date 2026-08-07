@@ -189,3 +189,12 @@ end $$;
 
 alter table users add column if not exists theme_color text;
 alter table users add column if not exists theme_image_key text;
+
+-- Discord account linking (OAuth2, "identify" scope only — no email, no guilds).
+-- Shown on the public profile page if connected. One Discord account can only
+-- ever be linked to one site account (the partial unique index below).
+alter table users add column if not exists discord_id text;
+alter table users add column if not exists discord_username text;
+alter table users add column if not exists discord_avatar_url text;
+
+create unique index if not exists idx_users_discord_id on users(discord_id) where discord_id is not null;

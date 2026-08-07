@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
+import { MessageCircle } from "lucide-react"
 import { getPublicProfile } from "@/lib/profiles"
 import { RoleBadge } from "@/components/role-badge"
 import { DonatorBadge } from "@/components/donator-badge"
@@ -62,6 +63,19 @@ export default async function PublicProfilePage({ params }: Props) {
             </div>
           )}
 
+          {profile.discord_username && (
+            <div className="mb-2 flex items-center gap-1.5">
+              {profile.discord_avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.discord_avatar_url} alt="" className="size-4 rounded-full" />
+              ) : (
+                <MessageCircle className="size-3.5 text-muted-foreground" />
+              )}
+              <span className="text-[11px] text-foreground">{profile.discord_username}</span>
+              <span className="text-[11px] text-muted-foreground">on Discord</span>
+            </div>
+          )}
+
           <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
             <span>Member since {memberSince}</span>
             {profile.links !== null && (
@@ -120,6 +134,12 @@ export default async function PublicProfilePage({ params }: Props) {
                 <dt>Role</dt>
                 <dd className="text-foreground capitalize">{profile.role}</dd>
               </div>
+              {profile.discord_username && (
+                <div className="flex justify-between gap-3">
+                  <dt>Discord</dt>
+                  <dd className="truncate text-foreground">{profile.discord_username}</dd>
+                </div>
+              )}
               {profile.links !== null && (
                 <div className="flex justify-between gap-3">
                   <dt>Shared links</dt>

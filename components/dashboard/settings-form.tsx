@@ -25,6 +25,7 @@ export function SettingsForm({ user }: { user: PublicUser }) {
       <LinksPublicSection user={user} />
       <MusicSection />
       <ThemeSection />
+      <DiscordSection />
       <UsernameSection user={user} />
       <EmailSection user={user} />
       <PasswordSection />
@@ -163,7 +164,7 @@ function ImageSection({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={loading}
-          className="cursor-pointer text-xs font-medium text-primary hover:underline disabled:opacity-60"
+          className="cursor-pointer rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
         >
           {loading ? "Uploading…" : "Change"}
         </button>
@@ -379,7 +380,7 @@ function MusicSection() {
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={loading}
-          className="cursor-pointer text-xs font-medium text-primary hover:underline disabled:opacity-60"
+          className="cursor-pointer rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
         >
           {loading ? "Working…" : status.url ? "Replace track" : "Upload track"}
         </button>
@@ -584,6 +585,102 @@ function ThemeSection() {
           )}
         </div>
       </div>
+    </Section>
+  )
+}
+
+// ---------------- Discord linking ----------------
+
+function DiscordSection() {
+  const [status, setStatus] = useState<{ connected: boolean; username: string | null; avatarUrl: string | null } | null>(
+    null,
+  )
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch("/api/user/settings/discord")
+      .then((r) => r.json())
+      .then(setStatus)
+      .catch(() => setStatus({ connected: false, username: null, avatarUrl: null }))
+  }, [])
+
+  useEffect(() => {
+    // Plain browser API rather than Next's useSearchParams — avoids needing a
+    // Suspense boundary just to read a couple of one-off redirect params.
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("discord_connected")) {
+      setInfo("Discord account connected.")
+    } else if (params.get("discord_error") === "taken") {
+      setError("That Discord account is already linked to another user.")
+    } else if (params.get("discord_error")) {
+      setError("Could not connect Discord. Please try again.")
+    }
+    if (params.has("discord_connected") || params.has("discord_error")) {
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+  }, [])
+
+  const disconnect = async () => {
+    setLoading(true)
+    setError(null)
+    setInfo(null)
+    try {
+      const res = await fetch("/api/user/settings/discord", { method: "DELETE" })
+      if (!res.ok) throw new Error("Could not disconnect Discord.")
+      setStatus({ connected: false, username: null, avatarUrl: null })
+      setInfo("Discord disconnected.")
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!status) return null
+
+  return (
+    <Section title="Discord">
+      <Msg error={error} info={info} />
+      {status.connected ? (
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {status.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={status.avatarUrl} alt="" className="size-8 rounded-full" />
+            ) : (
+              <div className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
+                D
+              </div>
+            )}
+            <div>
+              <p className="text-xs font-medium text-foreground">{status.username}</p>
+              <p className="text-[11px] text-muted-foreground">Shown on your public profile</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={disconnect}
+            disabled={loading}
+            className="text-xs font-medium text-destructive hover:underline disabled:opacity-60"
+          >
+            Disconnect
+          </button>
+        </div>
+      ) : (
+        <div>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Connect your Discord account to show it on your public profile.
+          </p>
+          <a
+            href="/api/auth/discord/start"
+            className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent"
+          >
+            Connect Discord
+          </a>
+        </div>
+      )}
     </Section>
   )
 }

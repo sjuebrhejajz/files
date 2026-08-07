@@ -11,6 +11,8 @@ export type PublicProfile = {
   created_at: string
   music_url: string | null
   music_enabled: boolean
+  discord_username: string | null
+  discord_avatar_url: string | null
   // null = owner has links_public off ("User disabled viewing" on the profile page)
   links: { filename: string; url: string; created_at: string }[] | null
 }
@@ -18,7 +20,7 @@ export type PublicProfile = {
 export async function getPublicProfile(username: string): Promise<PublicProfile | null> {
   const rows = await sql`
     select id, username, profile_picture_url, banner_url, role, is_donator, bio, links_public, created_at,
-           music_object_key, music_enabled
+           music_object_key, music_enabled, discord_username, discord_avatar_url
     from users
     where lower(username) = ${username.toLowerCase()}
   `
@@ -51,6 +53,8 @@ export async function getPublicProfile(username: string): Promise<PublicProfile 
     created_at: row.created_at,
     music_url: row.music_object_key ? `/a/${row.music_object_key}` : null,
     music_enabled: Boolean(row.music_enabled),
+    discord_username: row.discord_username,
+    discord_avatar_url: row.discord_avatar_url,
     links,
   }
 }
