@@ -36,5 +36,6 @@ export const bioSchema = z
   .trim()
   .max(280, "Bio must be at most 280 characters.")
   .refine((val) => !LINK_PATTERN.test(val), "Bio can't contain links.")
+  .refine((val) => !containsBannedTerm(val), "That bio isn't allowed.")
 
 export const blacklistTypeSchema = z.enum(["ip", "username", "email"])

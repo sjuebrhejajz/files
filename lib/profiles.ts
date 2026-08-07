@@ -1,6 +1,14 @@
 import { sql } from "@/lib/db"
 import type { Role } from "@/lib/auth"
 
+export type ProfileLink = {
+  filename: string
+  url: string
+  viewUrl: string
+  contentType: string | null
+  created_at: string
+}
+
 export type PublicProfile = {
   username: string
   profile_picture_url: string | null
@@ -14,7 +22,7 @@ export type PublicProfile = {
   discord_username: string | null
   discord_avatar_url: string | null
   // null = owner has links_public off ("User disabled viewing" on the profile page)
-  links: { filename: string; url: string; created_at: string }[] | null
+  links: ProfileLink[] | null
 }
 
 export async function getPublicProfile(username: string): Promise<PublicProfile | null> {
@@ -30,7 +38,7 @@ export async function getPublicProfile(username: string): Promise<PublicProfile 
   let links: PublicProfile["links"] = null
   if (row.links_public) {
     const uploadRows = await sql`
-      select short_id, filename, created_at
+      select short_id, filename, content_type, created_at
       from uploads
       where user_id = ${row.id} and expires_at > now()
       order by created_at desc
@@ -39,6 +47,8 @@ export async function getPublicProfile(username: string): Promise<PublicProfile 
     links = uploadRows.map((r) => ({
       filename: r.filename as string,
       url: `/f/${r.short_id}`,
+      viewUrl: `/v/${r.short_id}`,
+      contentType: r.content_type as string | null,
       created_at: r.created_at as string,
     }))
   }

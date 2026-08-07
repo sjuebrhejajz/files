@@ -1,9 +1,10 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { MessageCircle } from "lucide-react"
+import { MessageCircle, Play, FileIcon } from "lucide-react"
 import { getPublicProfile } from "@/lib/profiles"
 import { RoleBadge } from "@/components/role-badge"
 import { DonatorBadge } from "@/components/donator-badge"
+import { ProfileAudioPlayer } from "@/components/profile-audio-player"
 
 type Props = { params: Promise<{ username: string }> }
 
@@ -26,16 +27,17 @@ export default async function PublicProfilePage({ params }: Props) {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 lg:max-w-4xl">
-      <div className="mb-6 overflow-hidden rounded-xl border border-border bg-card">
+      <div className="mb-4 overflow-hidden rounded-xl border border-border bg-card">
         {profile.banner_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={profile.banner_url} alt="" className="h-32 w-full object-cover lg:h-48" />
         ) : (
           <div className="h-24 w-full bg-secondary lg:h-32" />
         )}
-        {/* This row overlaps the banner via -mt-8. Both sides are kept
-            compact enough to stay within the avatar's height, or content
-            rides up over the banner again. */}
+        {/* Only the avatar+username block is meant to overlap the banner via
+            -mt-8 (the classic profile-header look). The badges on the right
+            counteract that with their own mt-8, so they sit flush below the
+            banner instead of riding up over it. */}
         <div className="-mt-8 flex items-end justify-between gap-4 px-5">
           <div className="flex items-end gap-4">
             {profile.profile_picture_url ? (
@@ -43,10 +45,10 @@ export default async function PublicProfilePage({ params }: Props) {
               <img
                 src={profile.profile_picture_url}
                 alt={profile.username}
-                className="size-16 rounded-full border-4 border-card object-cover"
+                className="size-16 rounded-full border-4 border-card object-cover shadow-[0_0_24px_-4px_var(--primary)]"
               />
             ) : (
-              <div className="flex size-16 items-center justify-center rounded-full border-4 border-card bg-secondary text-xl font-semibold text-secondary-foreground">
+              <div className="flex size-16 items-center justify-center rounded-full border-4 border-card bg-secondary text-xl font-semibold text-secondary-foreground shadow-[0_0_24px_-4px_var(--primary)]">
                 {profile.username.slice(0, 1).toUpperCase()}
               </div>
             )}
@@ -57,7 +59,7 @@ export default async function PublicProfilePage({ params }: Props) {
           </div>
 
           {(profile.is_donator || profile.discord_username) && (
-            <div className="flex flex-col items-end gap-1 pb-1">
+            <div className="mt-8 flex flex-col items-end gap-1 pb-1">
               {profile.is_donator && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-muted-foreground">Donator</span>
@@ -90,15 +92,15 @@ export default async function PublicProfilePage({ params }: Props) {
           </div>
 
           {profile.bio && <p className="whitespace-pre-wrap text-sm text-foreground">{profile.bio}</p>}
-          {profile.music_enabled && profile.music_url && (
-            // Autoplay-with-sound is blocked by most browsers until the visitor
-            // has interacted with the page at least once — that's a browser
-            // policy, not something a site can override. Controls are shown so
-            // playback is still one click away if autoplay gets blocked.
-            <audio controls autoPlay loop src={profile.music_url} className="mt-3 w-full" />
-          )}
         </div>
       </div>
+
+      {/* Player lives below the profile card now, not squeezed inside the bio area. */}
+      {profile.music_enabled && profile.music_url && (
+        <div className="mb-6">
+          <ProfileAudioPlayer src={profile.music_url} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_260px]">
         <div>
@@ -110,13 +112,16 @@ export default async function PublicProfilePage({ params }: Props) {
           ) : (
             <ul className="flex flex-col gap-2">
               {profile.links.map((link) => (
-                <li
-                  key={link.url}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
-                >
-                  <span className="truncate text-sm text-foreground">{link.filename}</span>
-                  <a href={link.url} className="shrink-0 text-xs text-primary hover:underline">
-                    {link.url}
+                <li key={link.url}>
+                  <a
+                    href={link.viewUrl}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5 transition-colors hover:border-primary/40"
+                  >
+                    <LinkPreview url={link.url} contentType={link.contentType} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-foreground">{link.filename}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{link.url}</p>
+                    </div>
                   </a>
                 </li>
               ))}
@@ -165,5 +170,39 @@ export default async function PublicProfilePage({ params }: Props) {
         </aside>
       </div>
     </main>
+  )
+}
+
+function LinkPreview({ url, contentType }: { url: string; contentType: string | null }) {
+  const isImage = contentType?.startsWith("image/") ?? false
+  const isVideo = contentType?.startsWith("video/") ?? false
+
+  if (isImage) {
+    return (
+      <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="" className="size-full object-cover" />
+      </div>
+    )
+  }
+
+  if (isVideo) {
+    return (
+      <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary">
+        {/* preload="metadata" only grabs a frame for the thumbnail — it never
+            autoplays here, so a page with many video links doesn't turn into
+            several videos playing at once. */}
+        <video src={url} muted playsInline preload="metadata" className="size-full object-cover" />
+        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <Play className="size-3.5 fill-white text-white" />
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex size-12 shrink-0 items-center justify-center rounded-md bg-secondary">
+      <FileIcon className="size-4 text-muted-foreground" />
+    </div>
   )
 }
