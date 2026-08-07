@@ -3,7 +3,8 @@ import { sql } from "@/lib/db"
 import { emailSchema, usernameSchema, passwordSchema, codeSchema } from "@/lib/validators"
 import { verifyRegistrationCode, deleteRegistrationCode } from "@/lib/codes"
 import { hashPassword, createSession } from "@/lib/auth"
-import { isBlacklisted, getClientIp } from "@/lib/blacklist"
+import { getBlacklistMatch, getClientIp } from "@/lib/blacklist"
+import { recordUserIp } from "@/lib/user-ips"
 
 export async function POST(req: Request) {
   try {
@@ -25,8 +26,10 @@ export async function POST(req: Request) {
     if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 400 })
 
     const ip = getClientIp(req)
-    if (await isBlacklisted({ ip, username: username.data, email: email.data })) {
-      return NextResponse.json({ error: "Registration is not available for this account." }, { status: 403 })
+    const blacklistMatch = await getBlacklistMatch({ ip, username: username.data, email: email.data })
+    if (blacklistMatch) {
+      const message = blacklistMatch === "ip" ? "Registration is not available for this account." : `This ${blacklistMatch} is blacklisted.`
+      return NextResponse.json({ error: message }, { status: 403 })
     }
 
     // Re-check uniqueness right before insert (race-condition guard).
@@ -48,6 +51,7 @@ export async function POST(req: Request) {
 
     await deleteRegistrationCode(email.data)
     await createSession(userId, false)
+    await recordUserIp(userId, ip)
 
     return NextResponse.json({ ok: true })
   } catch (err) {

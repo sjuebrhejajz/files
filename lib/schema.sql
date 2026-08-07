@@ -139,3 +139,22 @@ create table if not exists image_moderation (
 create index if not exists idx_image_moderation_status on image_moderation(status);
 create index if not exists idx_image_moderation_user_kind on image_moderation(user_id, kind);
 create index if not exists idx_image_moderation_object_key on image_moderation(object_key);
+
+-- Tracks which IPs each account has logged in from, so staff can see and
+-- blacklist them from the backend panel. Starts populating going forward —
+-- there's no way to retroactively know IPs from before this table existed.
+create table if not exists user_ips (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  ip text not null,
+  first_seen timestamptz not null default now(),
+  last_seen timestamptz not null default now(),
+  unique(user_id, ip)
+);
+
+create index if not exists idx_user_ips_user on user_ips(user_id);
+
+-- Records the IP each session was created from, so staff can see a user's
+-- recent IPs on their Backend profile and blacklist one directly from there.
+alter table sessions add column if not exists ip_address text;
+create index if not exists idx_sessions_ip on sessions(ip_address);

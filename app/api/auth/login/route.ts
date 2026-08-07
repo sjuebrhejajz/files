@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { verifyPassword, createSession, isDeviceTrusted } from "@/lib/auth"
 import { createLoginTicket } from "@/lib/ticket"
 import { isBlacklisted, getClientIp } from "@/lib/blacklist"
+import { recordUserIp } from "@/lib/user-ips"
 
 export async function POST(req: Request) {
   try {
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
     }
 
     await createSession(user.id, remember)
+    await recordUserIp(user.id, ip)
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error("[login]", err)

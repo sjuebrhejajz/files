@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { requireCurrentUser, AuthError, hashPassword, verifyPassword } from "@/lib/auth"
 import { usernameSchema, passwordSchema, bioSchema } from "@/lib/validators"
+import { isBlacklisted } from "@/lib/blacklist"
 
 export async function PATCH(req: Request) {
   try {
@@ -12,6 +13,10 @@ export async function PATCH(req: Request) {
     if (typeof body.username === "string") {
       const parsed = usernameSchema.safeParse(body.username)
       if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+
+      if (await isBlacklisted({ username: parsed.data })) {
+        return NextResponse.json({ error: "This username is blacklisted." }, { status: 403 })
+      }
 
       const taken = await sql`
         select id from users where lower(username) = ${parsed.data.toLowerCase()} and id != ${user.id}

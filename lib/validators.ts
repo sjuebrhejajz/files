@@ -1,13 +1,15 @@
 import { z } from "zod"
+import { containsBannedTerm } from "@/lib/username-filter"
 
 export const emailSchema = z.string().trim().toLowerCase().email("Enter a valid email address.")
 
 export const usernameSchema = z
   .string()
   .trim()
-  .min(3, "Username must be at least 3 characters.")
+  .min(5, "Username must be over 4 characters.")
   .max(20, "Username must be at most 20 characters.")
-  .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores.")
+  .regex(/^[a-zA-Z0-9]+$/, "Username can only contain letters and numbers, no special characters.")
+  .refine((val) => !containsBannedTerm(val), "That username isn't allowed.")
 
 export const passwordSchema = z
   .string()

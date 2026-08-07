@@ -51,6 +51,8 @@ type ModerationItem = {
   userId: string
 }
 
+type IpRow = { ip: string; first_seen: string; last_seen: string }
+
 type UserDetailData = {
   user: UserRow & {
     bio: string | null
@@ -59,6 +61,7 @@ type UserDetailData = {
     banner_url: string | null
   }
   uploads: { id: string; filename: string; url: string; viewUrl: string; createdAt: string }[]
+  ips: IpRow[]
   blacklistHits: { type: string; value: string; reason: string | null }[]
   moderation: { id: string; kind: string; status: string; reason: string | null; createdAt: string }[]
 }
@@ -205,6 +208,7 @@ function UserDetail({
   const [blacklistValue, setBlacklistValue] = useState("")
   const [blacklistType, setBlacklistType] = useState<"ip" | "username" | "email">("username")
   const [blacklistReason, setBlacklistReason] = useState("")
+  const [newUsername, setNewUsername] = useState("")
 
   const load = useCallback(() => {
     call(`/api/admin/users/${encodeURIComponent(username)}`, undefined, "GET")
@@ -220,8 +224,10 @@ function UserDetail({
   if (!data) return <p className="text-xs text-muted-foreground">Loading…</p>
 
   const target = data.user
-  const targetIsStaff = target.role === "moderator" || target.role === "admin" || target.username.toLowerCase() === "admin"
+  const isTargetAdmin = target.username.toLowerCase() === "admin"
+  const targetIsStaff = target.role === "moderator" || target.role === "admin" || isTargetAdmin
   const isSelf = target.id === currentUser.id
+  const canRename = !isTargetAdmin && (!targetIsStaff || isAdmin)
 
   const doRole = async (action: "promote" | "demote") => {
     setActionLoading(true)
@@ -229,6 +235,23 @@ function UserDetail({
     try {
       await call(`/api/admin/users/${encodeURIComponent(username)}/role`, { action })
       load()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const forceRename = async () => {
+    if (!newUsername.trim()) return
+    setActionLoading(true)
+    setError(null)
+    try {
+      await call(`/api/admin/users/${encodeURIComponent(username)}/username`, { username: newUsername })
+      setNewUsername("")
+      // The old username is now stale (it just changed), so bounce back to the
+      // list — a fresh lookup by the new name isn't wired up on this screen.
+      onBack()
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -245,6 +268,19 @@ function UserDetail({
       await call("/api/admin/blacklist", { type: blacklistType, value, reason: blacklistReason })
       setBlacklistValue("")
       setBlacklistReason("")
+      load()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const blacklistIp = async (ip: string) => {
+    setActionLoading(true)
+    setError(null)
+    try {
+      await call("/api/admin/blacklist", { type: "ip", value: ip, reason: `From ${target.username}'s known IPs` })
       load()
     } catch (err) {
       setError((err as Error).message)
@@ -319,6 +355,31 @@ function UserDetail({
         )}
       </div>
 
+      {canRename && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="mb-3 text-sm font-medium text-foreground">Force rename</h3>
+          <div className="flex gap-2">
+            <input
+              value={newUsername}
+              onChange={(e) => setNewUsername(e.target.value)}
+              placeholder="New username"
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={forceRename}
+              className="shrink-0 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+            >
+              Rename
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Same rules as normal signup apply: 5–20 characters, letters and numbers only, no blacklisted or banned words.
+          </p>
+        </div>
+      )}
+
       <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="mb-3 text-sm font-medium text-foreground">Uploaded files ({data.uploads.length})</h3>
         {data.uploads.length === 0 ? (
@@ -331,6 +392,34 @@ function UserDetail({
                 <a href={f.viewUrl} target="_blank" rel="noreferrer" className="flex shrink-0 items-center gap-1 text-primary hover:underline">
                   Preview <ExternalLink className="size-3" />
                 </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="mb-3 text-sm font-medium text-foreground">Known IP addresses</h3>
+        {data.ips.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No recorded IPs yet — only logged from logins after this update.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {data.ips.map((row) => (
+              <li key={row.ip} className="flex items-center justify-between gap-2 rounded-md border border-border p-2 text-xs">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-foreground">{row.ip}</p>
+                  <p className="text-[11px] text-muted-foreground">last seen {new Date(row.last_seen).toLocaleString()}</p>
+                </div>
+                {!targetIsStaff && (
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={() => blacklistIp(row.ip)}
+                    className="flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive hover:bg-destructive/20 disabled:opacity-60"
+                  >
+                    <Ban className="size-3" /> Blacklist
+                  </button>
+                )}
               </li>
             ))}
           </ul>

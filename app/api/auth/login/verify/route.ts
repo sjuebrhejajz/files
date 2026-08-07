@@ -4,6 +4,8 @@ import { codeSchema } from "@/lib/validators"
 import { verifyTotpToken } from "@/lib/totp"
 import { createSession, markDeviceTrusted } from "@/lib/auth"
 import { verifyLoginTicket } from "@/lib/ticket"
+import { getClientIp } from "@/lib/blacklist"
+import { recordUserIp } from "@/lib/user-ips"
 
 export async function POST(req: Request) {
   try {
@@ -25,6 +27,7 @@ export async function POST(req: Request) {
 
     await createSession(claim.userId, remember)
     if (remember) await markDeviceTrusted(claim.userId)
+    await recordUserIp(claim.userId, getClientIp(req))
 
     return NextResponse.json({ ok: true })
   } catch (err) {

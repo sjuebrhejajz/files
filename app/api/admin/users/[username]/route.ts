@@ -16,7 +16,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ usernam
     const target = rows[0]
     if (!target) return NextResponse.json({ error: "User not found." }, { status: 404 })
 
-    const [uploads, blacklistHits, moderation] = await Promise.all([
+    const ipRows = await sql`
+      select ip, first_seen, last_seen from user_ips where user_id = ${target.id} order by last_seen desc limit 20
+    `
+    const ipList = ipRows.map((r) => r.ip as string)
+
+    const [uploads, usernameEmailHits, moderation, ipHits] = await Promise.all([
       sql`
         select id, short_id, filename, content_type, size_bytes, created_at, expires_at
         from uploads where user_id = ${target.id} order by created_at desc limit 100
@@ -30,6 +35,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ usernam
         select id, kind, object_key, status, reason, created_at
         from image_moderation where user_id = ${target.id} order by created_at desc limit 20
       `,
+      // Guarded separately: binding an empty array to any() is untested with this
+      // driver, so only run it when there's actually something to check.
+      ipList.length > 0
+        ? sql`select type, value, reason from blacklist where type = 'ip' and value = any(${ipList})`
+        : Promise.resolve([]),
     ])
 
     return NextResponse.json({
@@ -44,7 +54,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ usernam
         createdAt: u.created_at,
         expiresAt: u.expires_at,
       })),
-      blacklistHits,
+      ips: ipRows,
+      blacklistHits: [...usernameEmailHits, ...ipHits],
       moderation,
     })
   } catch (err) {

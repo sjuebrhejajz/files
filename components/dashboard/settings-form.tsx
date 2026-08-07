@@ -294,6 +294,7 @@ function UsernameSection({ user }: { user: PublicUser }) {
         <Input value={username} onChange={(e) => setUsername(e.target.value)} />
         <Button onClick={save} loading={loading} label="Save" />
       </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">5–20 characters, letters and numbers only.</p>
     </Section>
   )
 }
