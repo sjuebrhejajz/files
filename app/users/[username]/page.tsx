@@ -33,49 +33,53 @@ export default async function PublicProfilePage({ params }: Props) {
         ) : (
           <div className="h-24 w-full bg-secondary lg:h-32" />
         )}
-        {/* This row overlaps the banner via -mt-8, so it must stay exactly one
-            line tall — anything else (like the donator badge) belongs in the
-            section below instead, or it visually rides up over the banner. */}
-        <div className="-mt-8 flex items-end gap-4 px-5">
-          {profile.profile_picture_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={profile.profile_picture_url}
-              alt={profile.username}
-              className="size-16 rounded-full border-4 border-card object-cover"
-            />
-          ) : (
-            <div className="flex size-16 items-center justify-center rounded-full border-4 border-card bg-secondary text-xl font-semibold text-secondary-foreground">
-              {profile.username.slice(0, 1).toUpperCase()}
+        {/* This row overlaps the banner via -mt-8. Both sides are kept
+            compact enough to stay within the avatar's height, or content
+            rides up over the banner again. */}
+        <div className="-mt-8 flex items-end justify-between gap-4 px-5">
+          <div className="flex items-end gap-4">
+            {profile.profile_picture_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.profile_picture_url}
+                alt={profile.username}
+                className="size-16 rounded-full border-4 border-card object-cover"
+              />
+            ) : (
+              <div className="flex size-16 items-center justify-center rounded-full border-4 border-card bg-secondary text-xl font-semibold text-secondary-foreground">
+                {profile.username.slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 pb-1">
+              <h1 className="text-lg font-semibold text-foreground">{profile.username}</h1>
+              <RoleBadge role={profile.role} />
+            </div>
+          </div>
+
+          {(profile.is_donator || profile.discord_username) && (
+            <div className="flex flex-col items-end gap-1 pb-1">
+              {profile.is_donator && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground">Donator</span>
+                  <DonatorBadge />
+                </div>
+              )}
+              {profile.discord_username && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground">{profile.discord_username} on Discord</span>
+                  {profile.discord_avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={profile.discord_avatar_url} alt="" className="size-4 rounded-full" />
+                  ) : (
+                    <MessageCircle className="size-3.5 text-muted-foreground" />
+                  )}
+                </div>
+              )}
             </div>
           )}
-          <div className="flex items-center gap-1.5 pb-1">
-            <h1 className="text-lg font-semibold text-foreground">{profile.username}</h1>
-            <RoleBadge role={profile.role} />
-          </div>
         </div>
 
         <div className="px-5 pb-5 pt-3">
-          {profile.is_donator && (
-            <div className="mb-2 flex items-center gap-1.5">
-              <DonatorBadge />
-              <span className="text-[11px] text-muted-foreground">Donator</span>
-            </div>
-          )}
-
-          {profile.discord_username && (
-            <div className="mb-2 flex items-center gap-1.5">
-              {profile.discord_avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={profile.discord_avatar_url} alt="" className="size-4 rounded-full" />
-              ) : (
-                <MessageCircle className="size-3.5 text-muted-foreground" />
-              )}
-              <span className="text-[11px] text-foreground">{profile.discord_username}</span>
-              <span className="text-[11px] text-muted-foreground">on Discord</span>
-            </div>
-          )}
-
           <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
             <span>Member since {memberSince}</span>
             {profile.links !== null && (
