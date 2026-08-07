@@ -1,0 +1,43 @@
+import { NextResponse } from "next/server"
+import { PutObjectCommand } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+import { requireAdmin, AuthError } from "@/lib/auth"
+import { r2, BUCKET_NAME } from "@/lib/r2"
+
+const ALLOWED_TYPES: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+}
+const MAX_BYTES = 2 * 1024 * 1024 // 2 MB — these are small badge icons
+
+export async function POST(req: Request) {
+  try {
+    const admin = await requireAdmin()
+    const body = await req.json()
+    const contentType = String(body.contentType ?? "")
+    const size = Number(body.size ?? 0)
+
+    const ext = ALLOWED_TYPES[contentType]
+    if (!ext) {
+      return NextResponse.json({ error: "Only PNG, JPEG, WebP, or SVG images are allowed." }, { status: 400 })
+    }
+    if (!size || size > MAX_BYTES) {
+      return NextResponse.json({ error: "Badge image must be 2 MB or smaller." }, { status: 400 })
+    }
+
+    const key = `badges/${admin.id}-${Date.now()}.${ext}`
+    const uploadUrl = await getSignedUrl(
+      r2,
+      new PutObjectCommand({ Bucket: BUCKET_NAME, Key: key, ContentType: contentType }),
+      { expiresIn: 60 * 5 },
+    )
+
+    return NextResponse.json({ uploadUrl, key })
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status })
+    console.error("[admin/badges/image-url]", err)
+    return NextResponse.json({ error: "Could not create upload URL." }, { status: 500 })
+  }
+}

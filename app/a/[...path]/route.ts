@@ -6,12 +6,12 @@ import { getCurrentUser, isStaff } from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
-// Serves avatar/banner/music/theme/video files directly by their known object key.
-// Unlike /f/[id], which resolves an opaque short id by scanning the whole
-// bucket, these keys are predictable (avatars/<userId>-<timestamp>.<ext>,
-// banners/<userId>-<timestamp>.<ext>, music/<userId>-<timestamp>.mp3,
-// themes/<userId>-<timestamp>.<ext>, or video/<userId>-<timestamp>.<ext>) so
-// we can fetch them directly.
+// Serves avatar/banner/music/theme/video/badge files directly by their known
+// object key. Unlike /f/[id], which resolves an opaque short id by scanning
+// the whole bucket, these keys are predictable (avatars/<userId>-<ts>.<ext>,
+// banners/<userId>-<ts>.<ext>, music/<userId>-<ts>.mp3, themes/<userId>-<ts>.<ext>,
+// video/<userId>-<ts>.<ext>, or badges/<adminId>-<ts>.<ext>) so we can fetch
+// them directly.
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
   const key = path.join("/")
@@ -20,9 +20,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const isMusic = key.startsWith("music/")
   const isTheme = key.startsWith("themes/")
   const isVideo = key.startsWith("video/")
+  const isBadge = key.startsWith("badges/")
 
   // Only ever serve objects under these prefixes through this route.
-  if (!isImage && !isMusic && !isTheme && !isVideo) {
+  if (!isImage && !isMusic && !isTheme && !isVideo && !isBadge) {
     return new NextResponse("Not found", { status: 404 })
   }
 
@@ -30,7 +31,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     let isPublic: boolean
     let ownerId: string | null = null
 
-    if (isImage) {
+    if (isBadge) {
+      // Admin-uploaded and admin-controlled — never gated by moderation or
+      // ownership, always public once created.
+      isPublic = true
+    } else if (isImage) {
       const rows = await sql`
         select user_id, status from image_moderation where object_key = ${key} order by created_at desc limit 1
       `

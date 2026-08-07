@@ -208,3 +208,25 @@ alter table users add column if not exists music_title text;
 -- settings UI only exposes this section to role = 'admin'.
 alter table users add column if not exists video_object_key text;
 alter table users add column if not exists video_enabled boolean not null default false;
+
+-- Admin-created badge types (name + a small uploaded image) that can be
+-- granted to any number of user profiles. Badge images are admin-uploaded,
+-- so unlike avatars/banners they're never queued for moderation.
+create table if not exists custom_badges (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  image_key text not null,
+  created_by uuid references users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- Which users have which badges. A user can hold any number of badges.
+create table if not exists user_badges (
+  user_id uuid not null references users(id) on delete cascade,
+  badge_id uuid not null references custom_badges(id) on delete cascade,
+  granted_by uuid references users(id) on delete set null,
+  granted_at timestamptz not null default now(),
+  primary key (user_id, badge_id)
+);
+
+create index if not exists idx_user_badges_user on user_badges(user_id);

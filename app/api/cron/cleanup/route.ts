@@ -27,12 +27,18 @@ export async function GET(request: NextRequest) {
       )
       for (const obj of result.Contents ?? []) {
         if (!obj.Key) continue
-        // Profile pictures, banners, music tracks, and theme backgrounds don't expire — only files uploaded through the main uploader do.
+        // Profile pictures, banners, music tracks, theme backgrounds, profile
+        // videos, and badge icons don't expire — only files uploaded through
+        // the main uploader do. (video/ was missing here before — any
+        // profile background video would have been silently deleted 7 days
+        // after upload.)
         if (
           obj.Key.startsWith("avatars/") ||
           obj.Key.startsWith("banners/") ||
           obj.Key.startsWith("music/") ||
-          obj.Key.startsWith("themes/")
+          obj.Key.startsWith("themes/") ||
+          obj.Key.startsWith("video/") ||
+          obj.Key.startsWith("badges/")
         )
           continue
         const name = obj.Key.split("/").pop() ?? ""

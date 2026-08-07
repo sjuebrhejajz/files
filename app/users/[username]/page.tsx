@@ -2,9 +2,11 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { MessageCircle } from "lucide-react"
 import { getPublicProfile } from "@/lib/profiles"
+import { getCurrentUser, isStaff } from "@/lib/auth"
 import { neonFont } from "@/lib/fonts"
 import { RoleBadge } from "@/components/role-badge"
 import { DonatorBadge } from "@/components/donator-badge"
+import { CustomBadge } from "@/components/custom-badge"
 import { ProfileAudioPlayer } from "@/components/profile-audio-player"
 import { LinkPreview } from "@/components/link-preview"
 import { ProfileVideoBackground } from "@/components/profile-video-background"
@@ -13,12 +15,9 @@ type Props = { params: Promise<{ username: string }> }
 
 // This page reads live per-user data (video/music toggles, bio, badges,
 // links) straight from the database on every request, and none of that
-// counts as a Next.js "dynamic API" (no cookies()/headers() call happens
-// here) — so without this, Next.js has no signal that the page depends on
-// anything request-specific and silently caches the rendered HTML. That's
-// exactly why toggling something in Settings didn't show up here until the
-// next full deploy: this line forces a fresh render (and fresh DB read) on
-// every visit instead.
+// counts as a Next.js "dynamic API" — without this, Next.js has no signal
+// that the page depends on anything request-specific and caches the
+// rendered HTML instead of re-running the query on each visit.
 export const dynamic = "force-dynamic"
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -41,7 +40,7 @@ function Pill({ children }: { children: React.ReactNode }) {
 
 export default async function PublicProfilePage({ params }: Props) {
   const { username } = await params
-  const profile = await getPublicProfile(username)
+  const [profile, viewer] = await Promise.all([getPublicProfile(username), getCurrentUser()])
   if (!profile) notFound()
 
   const memberSince = new Date(profile.created_at).toLocaleDateString(undefined, {
@@ -54,9 +53,31 @@ export default async function PublicProfilePage({ params }: Props) {
   // separate music widget above, never from the background video itself.
   const hasVideoBackground = profile.video_enabled && Boolean(profile.video_url)
 
+  // Only the profile owner or staff see this — shows exactly what the page
+  // computed so a "nothing shows up" report can be diagnosed from a
+  // screenshot instead of guessing blind. Safe to leave in permanently: it's
+  // just booleans and a key, not sensitive, and invisible to everyone else.
+  const isOwnerOrStaff = viewer && (viewer.username.toLowerCase() === profile.username.toLowerCase() || isStaff(viewer))
+
   return (
     <main className="relative mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 lg:max-w-4xl">
-      {hasVideoBackground && <ProfileVideoBackground src={profile.video_url as string} />}
+      {hasVideoBackground && <ProfileVideoBackground src={profile.video_url as string} debug={Boolean(isOwnerOrStaff)} />}
+
+      {isOwnerOrStaff && (
+        <p className="mb-3 rounded-md border border-border bg-secondary/40 px-3 py-2 font-mono text-[10px] text-muted-foreground">
+          [debug, only you/staff see this] video_enabled={String(profile.video_enabled)} · video_url=
+          {profile.video_url ?? "null"} · resolved=<b className="text-foreground">{String(hasVideoBackground)}</b>
+          {hasVideoBackground && (
+            <>
+              {" "}
+              ·{" "}
+              <a href={profile.video_url as string} target="_blank" rel="noreferrer" className="underline">
+                open video URL directly
+              </a>
+            </>
+          )}
+        </p>
+      )}
 
       <div
         className={`animate-in fade-in slide-in-from-bottom-2 duration-500 mb-4 overflow-hidden rounded-xl border border-border bg-card transition-shadow ${
@@ -69,59 +90,55 @@ export default async function PublicProfilePage({ params }: Props) {
         ) : (
           <div className="h-24 w-full bg-secondary lg:h-32" />
         )}
-        {/* Only the avatar+username block is meant to overlap the banner via
-            -mt-8 (the classic profile-header look). The badges on the right
-            counteract that with their own mt-8, so they sit flush below the
-            banner instead of riding up over it. */}
-        <div className="-mt-8 flex items-end justify-between gap-4 px-5">
-          <div className="flex items-end gap-4">
-            {profile.profile_picture_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={profile.profile_picture_url}
-                alt={profile.username}
-                className="size-16 rounded-full border-4 border-card object-cover shadow-[0_0_24px_-4px_var(--primary)] transition-shadow duration-300 hover:shadow-[0_0_32px_-2px_var(--primary)]"
-              />
-            ) : (
-              <div className="flex size-16 items-center justify-center rounded-full border-4 border-card bg-secondary text-xl font-semibold text-secondary-foreground shadow-[0_0_24px_-4px_var(--primary)]">
-                {profile.username.slice(0, 1).toUpperCase()}
-              </div>
-            )}
-            <div className="flex items-center gap-1.5 pb-1">
-              <h1
-                className={`${neonFont.className} text-lg tracking-wide text-foreground [text-shadow:0_0_18px_var(--primary)]`}
-              >
-                {profile.username}
-              </h1>
-              <RoleBadge role={profile.role} />
-            </div>
-          </div>
-
-          {(profile.is_donator || profile.discord_username) && (
-            <div className="mt-8 flex flex-col items-end gap-1.5 pb-1">
-              {profile.is_donator && (
-                <Pill>
-                  Donator
-                  <DonatorBadge />
-                </Pill>
-              )}
-              {profile.discord_username && (
-                <Pill>
-                  {profile.discord_username} on Discord
-                  {profile.discord_avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={profile.discord_avatar_url} alt="" className="size-4 rounded-full" />
-                  ) : (
-                    <MessageCircle className="size-3.5" />
-                  )}
-                </Pill>
-              )}
+        {/* Only the avatar+username overlaps the banner via -mt-8 (the classic
+            profile-header look) — everything else (donator/discord/stats)
+            lives in the content section below, which has no negative margin,
+            so nothing else can ever ride up over the banner. */}
+        <div className="-mt-8 flex items-end gap-4 px-5">
+          {profile.profile_picture_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profile.profile_picture_url}
+              alt={profile.username}
+              className="size-16 rounded-full border-4 border-card object-cover shadow-[0_0_24px_-4px_var(--primary)] transition-shadow duration-300 hover:shadow-[0_0_32px_-2px_var(--primary)]"
+            />
+          ) : (
+            <div className="flex size-16 items-center justify-center rounded-full border-4 border-card bg-secondary text-xl font-semibold text-secondary-foreground shadow-[0_0_24px_-4px_var(--primary)]">
+              {profile.username.slice(0, 1).toUpperCase()}
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-1.5 pb-1">
+            <h1
+              className={`${neonFont.className} text-lg tracking-wide text-foreground [text-shadow:0_0_18px_var(--primary)]`}
+            >
+              {profile.username}
+            </h1>
+            <RoleBadge role={profile.role} />
+            {profile.badges.map((badge) => (
+              <CustomBadge key={badge.id} name={badge.name} imageUrl={badge.imageUrl} />
+            ))}
+          </div>
         </div>
 
         <div className="px-5 pb-5 pt-3">
           <div className="mb-3 flex flex-wrap items-center gap-2">
+            {profile.is_donator && (
+              <Pill>
+                Donator
+                <DonatorBadge />
+              </Pill>
+            )}
+            {profile.discord_username && (
+              <Pill>
+                {profile.discord_username} on Discord
+                {profile.discord_avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={profile.discord_avatar_url} alt="" className="size-4 rounded-full" />
+                ) : (
+                  <MessageCircle className="size-3.5" />
+                )}
+              </Pill>
+            )}
             <Pill>Member since {memberSince}</Pill>
             {profile.links !== null && (
               <Pill>
@@ -136,7 +153,10 @@ export default async function PublicProfilePage({ params }: Props) {
 
       {/* Player lives below the profile card now, not squeezed inside the bio area. */}
       {profile.music_enabled && profile.music_url && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 mb-6" style={{ animationDelay: "100ms", animationFillMode: "backwards" }}>
+        <div
+          className="animate-in fade-in slide-in-from-bottom-2 duration-500 mb-6"
+          style={{ animationDelay: "100ms", animationFillMode: "backwards" }}
+        >
           <ProfileAudioPlayer src={profile.music_url} title={profile.music_title} />
         </div>
       )}

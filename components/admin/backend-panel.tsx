@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Creepster } from "next/font/google"
 import {
   ArrowLeft,
+  Award,
   Ban,
   Bug,
   CircleDollarSign,
@@ -20,10 +21,11 @@ import {
 import type { PublicUser, Role } from "@/lib/auth"
 import { RoleBadge } from "@/components/role-badge"
 import { DonatorBadge } from "@/components/donator-badge"
+import { CustomBadge } from "@/components/custom-badge"
 
 const spooky = Creepster({ subsets: ["latin"], weight: "400" })
 
-type Tab = "users" | "blacklist" | "moderation" | "uploads"
+type Tab = "users" | "blacklist" | "moderation" | "uploads" | "badges"
 
 type UserRow = {
   id: string
@@ -97,24 +99,27 @@ export function BackendPanel({ currentUser }: { currentUser: PublicUser }) {
       </p>
 
       <div className="mb-6 flex gap-1 border-b border-border">
-        {(["users", "blacklist", "moderation", "uploads"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`px-3 py-2 text-xs font-medium capitalize transition-colors ${
-              tab === t ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t === "moderation" ? "Moderation Queue" : t === "uploads" ? "All Uploads" : t}
-          </button>
-        ))}
+        {(["users", "blacklist", "moderation", "uploads", ...(isAdmin ? (["badges"] as Tab[]) : [])] as Tab[]).map(
+          (t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`px-3 py-2 text-xs font-medium capitalize transition-colors ${
+                tab === t ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t === "moderation" ? "Moderation Queue" : t === "uploads" ? "All Uploads" : t}
+            </button>
+          ),
+        )}
       </div>
 
       {tab === "users" && <UsersTab isAdmin={isAdmin} currentUser={currentUser} />}
       {tab === "blacklist" && <BlacklistTab />}
       {tab === "moderation" && <ModerationTab />}
       {tab === "uploads" && <UploadsTab />}
+      {tab === "badges" && isAdmin && <BadgesTab />}
     </main>
   )
 }
@@ -414,6 +419,8 @@ function UserDetail({
         )}
       </div>
 
+      {isAdmin && !isSelf && <UserBadgesSection username={target.username} />}
+
       {canRename && (
         <div className="rounded-xl border border-border bg-card p-4">
           <h3 className="mb-3 text-sm font-medium text-foreground">Force rename</h3>
@@ -531,6 +538,108 @@ function UserDetail({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ==================== Per-user badge assignment ====================
+
+type BadgeItem = { id: string; name: string; imageUrl: string }
+
+function UserBadgesSection({ username }: { username: string }) {
+  const [allBadges, setAllBadges] = useState<BadgeItem[] | null>(null)
+  const [assigned, setAssigned] = useState<BadgeItem[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    Promise.all([
+      call("/api/admin/badges", undefined, "GET"),
+      call(`/api/admin/users/${encodeURIComponent(username)}/badges`, undefined, "GET"),
+    ])
+      .then(([all, mine]) => {
+        setAllBadges(all.badges)
+        setAssigned(mine.badges)
+      })
+      .catch((err) => setError((err as Error).message))
+  }, [username])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const grant = async (badgeId: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      await call(`/api/admin/users/${encodeURIComponent(username)}/badges`, { badgeId })
+      load()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const revoke = async (badgeId: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      await call(`/api/admin/users/${encodeURIComponent(username)}/badges?badgeId=${badgeId}`, undefined, "DELETE")
+      load()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!allBadges || !assigned) return null
+
+  const assignedIds = new Set(assigned.map((b) => b.id))
+  const available = allBadges.filter((b) => !assignedIds.has(b.id))
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <h3 className="mb-3 text-sm font-medium text-foreground">Badges</h3>
+      {error && <p className="mb-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
+
+      {assigned.length > 0 && (
+        <ul className="mb-3 flex flex-wrap gap-2">
+          {assigned.map((b) => (
+            <li key={b.id} className="flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-xs">
+              <CustomBadge name={b.name} imageUrl={b.imageUrl} />
+              {b.name}
+              <button type="button" disabled={loading} onClick={() => revoke(b.id)} className="text-muted-foreground hover:text-destructive">
+                <Trash2 className="size-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {available.length === 0 ? (
+        allBadges.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No badge types created yet — add one in the Badges tab.</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">All existing badges are already assigned.</p>
+        )
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {available.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              disabled={loading}
+              onClick={() => grant(b.id)}
+              className="flex items-center gap-1.5 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground disabled:opacity-60"
+            >
+              <CustomBadge name={b.name} imageUrl={b.imageUrl} />
+              + {b.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -807,6 +916,123 @@ function UploadsTab() {
               >
                 Preview <ExternalLink className="size-3" />
               </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// ==================== Badges tab (admin only) ====================
+
+function BadgesTab() {
+  const [badges, setBadges] = useState<BadgeItem[] | null>(null)
+  const [name, setName] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(() => {
+    call("/api/admin/badges", undefined, "GET")
+      .then((data) => setBadges(data.badges))
+      .catch((err) => setError((err as Error).message))
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const onFile = async (file: File) => {
+    setError(null)
+    if (!name.trim()) {
+      setError("Give the badge a name first.")
+      return
+    }
+    const allowed = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"]
+    if (!allowed.includes(file.type)) {
+      setError("Only PNG, JPEG, WebP, or SVG images are allowed.")
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Badge image must be 2 MB or smaller.")
+      return
+    }
+    setLoading(true)
+    try {
+      const { uploadUrl, key } = await call("/api/admin/badges/image-url", { contentType: file.type, size: file.size })
+      const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
+      if (!put.ok) throw new Error("Upload failed.")
+      await call("/api/admin/badges", { name: name.trim(), key })
+      setName("")
+      load()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      await call(`/api/admin/badges/${id}`, undefined, "DELETE")
+      load()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
+
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="mb-3 text-sm font-medium text-foreground">Create a badge</h3>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Badge name (e.g. Beta Tester)"
+            maxLength={40}
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+          />
+          <div className="relative inline-flex shrink-0">
+            <span
+              aria-hidden
+              className="pointer-events-none flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground"
+            >
+              <Award className="size-3.5" /> {loading ? "Working…" : "Upload image"}
+            </span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              disabled={loading}
+              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+              className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+            />
+          </div>
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">PNG, JPEG, WebP, or SVG · up to 2 MB · always public</p>
+      </div>
+
+      {!badges ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : badges.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No badges created yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {badges.map((b) => (
+            <li key={b.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2">
+                <CustomBadge name={b.name} imageUrl={b.imageUrl} />
+                <span className="text-sm text-foreground">{b.name}</span>
+              </div>
+              <button type="button" disabled={loading} onClick={() => remove(b.id)} className="text-muted-foreground hover:text-destructive">
+                <Trash2 className="size-4" />
+              </button>
             </li>
           ))}
         </ul>

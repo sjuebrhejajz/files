@@ -57,9 +57,11 @@ export async function fetchDiscordUser(accessToken: string): Promise<DiscordIden
 
   return {
     id: String(data.id),
-    // global_name is the modern "display name" Discord shows instead of the
-    // old username#0000 discriminator system; falls back to username if unset.
-    username: String(data.global_name || data.username),
+    // Discord's account username (the @handle), not global_name (the
+    // "display name" shown in the client) — requested explicitly since
+    // display names can be anything and don't identify the account the way
+    // the actual username does.
+    username: String(data.username),
     avatarUrl,
   }
 }
