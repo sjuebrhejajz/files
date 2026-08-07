@@ -89,3 +89,53 @@ create index if not exists idx_uploads_short_id on uploads(short_id);
 
 -- TOTP (authenticator app) 2FA. Run this if your users table predates this migration:
 alter table users add column if not exists two_fa_secret text;
+
+-- ============================================================================
+-- Roles, blacklist, and image moderation.
+-- Safe to run against a database that already has the tables/columns above.
+-- ============================================================================
+
+alter table users add column if not exists role text not null default 'user';
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'users_role_check') then
+    alter table users add constraint users_role_check check (role in ('user', 'moderator', 'admin'));
+  end if;
+end $$;
+
+alter table users add column if not exists bio text;
+alter table users add column if not exists banner_url text;
+alter table users add column if not exists links_public boolean not null default false;
+
+-- The account named "admin" is always the site admin.
+update users set role = 'admin' where lower(username) = 'admin';
+
+-- Bans/blocks by IP, username, or email. Enforced at register, login, and upload.
+create table if not exists blacklist (
+  id uuid primary key default gen_random_uuid(),
+  type text not null check (type in ('ip', 'username', 'email')),
+  value text not null,
+  reason text,
+  created_by uuid references users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique(type, value)
+);
+
+-- Every avatar/banner upload lands here as 'pending' until staff approve, deny, or ban it.
+-- Only 'approved' rows are ever served publicly (see app/a/[...path]/route.ts).
+create table if not exists image_moderation (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  kind text not null check (kind in ('avatar', 'banner')),
+  object_key text not null,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'denied', 'banned')),
+  reason text,
+  reviewed_by uuid references users(id) on delete set null,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_image_moderation_status on image_moderation(status);
+create index if not exists idx_image_moderation_user_kind on image_moderation(user_id, kind);
+create index if not exists idx_image_moderation_object_key on image_moderation(object_key);

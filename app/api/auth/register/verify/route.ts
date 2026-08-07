@@ -3,6 +3,7 @@ import { sql } from "@/lib/db"
 import { emailSchema, usernameSchema, passwordSchema, codeSchema } from "@/lib/validators"
 import { verifyRegistrationCode, deleteRegistrationCode } from "@/lib/codes"
 import { hashPassword, createSession } from "@/lib/auth"
+import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
 export async function POST(req: Request) {
   try {
@@ -22,6 +23,11 @@ export async function POST(req: Request) {
 
     const check = await verifyRegistrationCode(email.data, code.data)
     if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 400 })
+
+    const ip = getClientIp(req)
+    if (await isBlacklisted({ ip, username: username.data, email: email.data })) {
+      return NextResponse.json({ error: "Registration is not available for this account." }, { status: 403 })
+    }
 
     // Re-check uniqueness right before insert (race-condition guard).
     const [emailTaken, usernameTaken] = await Promise.all([

@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react"
 import { Trophy } from "lucide-react"
+import { RoleBadge } from "@/components/role-badge"
+import type { Role } from "@/lib/auth"
 
 type Entry = {
   username: string
   profile_picture_url: string | null
+  role: Role
   total_cents: number
 }
 
@@ -37,7 +40,10 @@ export function Leaderboard() {
               {entry.username.slice(0, 1).toUpperCase()}
             </div>
           )}
-          <span className="flex-1 truncate text-sm font-medium text-foreground">{entry.username}</span>
+          <span className="flex flex-1 items-center gap-1.5 truncate text-sm font-medium text-foreground">
+            {entry.username}
+            <RoleBadge role={entry.role} />
+          </span>
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Trophy className="size-3.5" />£{(entry.total_cents / 100).toFixed(2)}
           </span>

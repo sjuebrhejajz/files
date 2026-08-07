@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { verifyPassword, createSession, isDeviceTrusted } from "@/lib/auth"
 import { createLoginTicket } from "@/lib/ticket"
+import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
 export async function POST(req: Request) {
   try {
@@ -14,8 +15,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Enter your email/username and password." }, { status: 400 })
     }
 
+    const ip = getClientIp(req)
+    if (await isBlacklisted({ ip })) {
+      return NextResponse.json({ error: "Access denied." }, { status: 403 })
+    }
+
     const rows = await sql`
-      select id, password_hash, two_fa_enabled
+      select id, username, email, password_hash, two_fa_enabled
       from users
       where email = ${identifier} or lower(username) = ${identifier}
     `
@@ -24,6 +30,10 @@ export async function POST(req: Request) {
     // Generic error message on purpose — don't reveal whether the account exists.
     const invalid = () => NextResponse.json({ error: "Incorrect email/username or password." }, { status: 401 })
     if (!user) return invalid()
+
+    if (await isBlacklisted({ username: user.username, email: user.email })) {
+      return NextResponse.json({ error: "Access denied." }, { status: 403 })
+    }
 
     const valid = await verifyPassword(password, user.password_hash)
     if (!valid) return invalid()

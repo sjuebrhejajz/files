@@ -22,3 +22,17 @@ export const phoneSchema = z
   .string()
   .trim()
   .regex(/^\+[1-9]\d{7,14}$/, "Enter phone number in E.164 format, e.g. +14155552671.")
+
+// Rough-and-ready link detector: catches "http(s)://", "www.", and bare
+// "word.tld" patterns. Not bulletproof (nothing regex-based ever is), but it
+// stops the common cases without needing a full link-parsing library.
+const LINK_PATTERN =
+  /(https?:\/\/|www\.)|(\b[a-z0-9-]+\.(com|net|org|io|co|uk|gg|me|dev|app|xyz|info|biz|tv|link|us|ca|de|fr|ru|top|shop|club|store|online|live|tk|ml|cc|gov|edu)\b)/i
+
+export const bioSchema = z
+  .string()
+  .trim()
+  .max(280, "Bio must be at most 280 characters.")
+  .refine((val) => !LINK_PATTERN.test(val), "Bio can't contain links.")
+
+export const blacklistTypeSchema = z.enum(["ip", "username", "email"])

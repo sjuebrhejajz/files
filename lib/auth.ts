@@ -10,12 +10,18 @@ const SESSION_DAYS_DEFAULT = 1 // if "remember this device" is not checked, sess
 const SESSION_DAYS_REMEMBERED = 30
 const DEVICE_DAYS = 60
 
+export type Role = "user" | "moderator" | "admin"
+
 export type PublicUser = {
   id: string
   email: string
   username: string
   profile_picture_url: string | null
+  banner_url: string | null
+  bio: string | null
+  links_public: boolean
   two_fa_enabled: boolean
+  role: Role
   created_at: string
 }
 
@@ -77,7 +83,8 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
   if (!token) return null
 
   const rows = await sql`
-    select u.id, u.email, u.username, u.profile_picture_url, u.two_fa_enabled, u.created_at
+    select u.id, u.email, u.username, u.profile_picture_url, u.banner_url, u.bio,
+           u.links_public, u.two_fa_enabled, u.role, u.created_at
     from sessions s
     join users u on u.id = s.user_id
     where s.token_hash = ${sha256(token)} and s.expires_at > now()
@@ -89,6 +96,30 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
 export async function requireCurrentUser(): Promise<PublicUser> {
   const user = await getCurrentUser()
   if (!user) throw new AuthError("Not authenticated", 401)
+  return user
+}
+
+// ---------- roles ----------
+
+export function isStaff(user: Pick<PublicUser, "role">): boolean {
+  return user.role === "moderator" || user.role === "admin"
+}
+
+export function isAdmin(user: Pick<PublicUser, "role">): boolean {
+  return user.role === "admin"
+}
+
+/** Throws 401 if not signed in, 403 if signed in but not moderator/admin. */
+export async function requireStaff(): Promise<PublicUser> {
+  const user = await requireCurrentUser()
+  if (!isStaff(user)) throw new AuthError("Staff access only.", 403)
+  return user
+}
+
+/** Throws 401 if not signed in, 403 if signed in but not admin. */
+export async function requireAdmin(): Promise<PublicUser> {
+  const user = await requireCurrentUser()
+  if (!isAdmin(user)) throw new AuthError("Admin access only.", 403)
   return user
 }
 

@@ -5,8 +5,6 @@ import { requireCurrentUser, AuthError } from "@/lib/auth"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
-// Any image/* content type is accepted (png, jpeg, webp, gif, svg, heic, avif, etc).
-// Anything that isn't an image — video, audio, whatever — is rejected outright.
 const EXT_BY_TYPE: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -44,9 +42,8 @@ export async function POST(req: Request) {
     }
 
     const ext = EXT_BY_TYPE[contentType] ?? contentType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") ?? "bin"
-    // Reuses the same R2 bucket/credentials the file uploader already uses — no separate
-    // S3_* env vars needed. Namespaced under avatars/ so the cleanup cron can skip these.
-    const key = `avatars/${user.id}-${Date.now()}.${ext}`
+    // Namespaced under banners/ (parallel to avatars/) so the cleanup cron skips these too.
+    const key = `banners/${user.id}-${Date.now()}.${ext}`
 
     const uploadUrl = await getSignedUrl(
       r2,
@@ -54,13 +51,10 @@ export async function POST(req: Request) {
       { expiresIn: 60 * 5 },
     )
 
-    // No publicUrl here on purpose: the image isn't public until staff approve it
-    // via the moderation queue. The client submits this key to
-    // /api/user/settings/image next, which queues it for review.
     return NextResponse.json({ uploadUrl, key })
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status })
-    console.error("[user/settings/avatar-url]", err)
+    console.error("[user/settings/banner-url]", err)
     return NextResponse.json({ error: "Could not create upload URL." }, { status: 500 })
   }
 }

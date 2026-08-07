@@ -7,10 +7,10 @@ export async function GET() {
     await requireCurrentUser() // leaderboard is only visible after login
 
     const rows = await sql`
-      select u.username, u.profile_picture_url, sum(d.amount_cents) as total_cents
+      select u.username, u.profile_picture_url, u.role, sum(d.amount_cents) as total_cents
       from donations d
       join users u on u.id = d.user_id
-      group by u.id, u.username, u.profile_picture_url
+      group by u.id, u.username, u.profile_picture_url, u.role
       order by total_cents desc
       limit 3
     `

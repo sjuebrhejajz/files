@@ -7,9 +7,13 @@ import { rateLimit } from "@/lib/rate-limit"
 //   bucket with junk objects or run up R2 request costs.
 // - /api/presence: called every 8s per open tab already; a scripted client
 //   could call it far faster and generate a PutObject on every hit.
+// - /api/user/settings/avatar-url, /api/user/settings/banner-url: same
+//   presign-abuse shape as /api/upload, just for profile images.
 const LIMITS: Record<string, { limit: number; windowMs: number }> = {
   "/api/upload": { limit: 20, windowMs: 60_000 }, // 20 presigns / min / IP
   "/api/presence": { limit: 30, windowMs: 60_000 }, // ~1 every 2s / IP
+  "/api/user/settings/avatar-url": { limit: 10, windowMs: 60_000 },
+  "/api/user/settings/banner-url": { limit: 10, windowMs: 60_000 },
 }
 
 export function middleware(request: NextRequest) {
@@ -35,5 +39,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/upload", "/api/presence"],
+  matcher: ["/api/upload", "/api/presence", "/api/user/settings/avatar-url", "/api/user/settings/banner-url"],
 }

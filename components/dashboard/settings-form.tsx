@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Loader2, ShieldCheck, ShieldOff } from "lucide-react"
 import type { PublicUser } from "@/lib/auth"
 
@@ -18,7 +18,10 @@ async function call(url: string, body: unknown, method: "POST" | "PATCH" = "POST
 export function SettingsForm({ user }: { user: PublicUser }) {
   return (
     <div className="flex flex-col gap-8">
-      <AvatarSection user={user} />
+      <ImageSection user={user} kind="avatar" label="Profile picture" shape="circle" />
+      <ImageSection user={user} kind="banner" label="Banner" shape="banner" />
+      <BioSection user={user} />
+      <LinksPublicSection user={user} />
       <UsernameSection user={user} />
       <EmailSection user={user} />
       <PasswordSection />
@@ -68,22 +71,123 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   )
 }
 
-// ---------------- profile picture ----------------
+// ---------------- profile picture / banner ----------------
 
-function AvatarSection({ user }: { user: PublicUser }) {
-  const [preview, setPreview] = useState(user.profile_picture_url)
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024 // 25 MB
+
+function ImageSection({
+  user,
+  kind,
+  label,
+  shape,
+}: {
+  user: PublicUser
+  kind: "avatar" | "banner"
+  label: string
+  shape: "circle" | "banner"
+}) {
+  const approvedUrl = kind === "avatar" ? user.profile_picture_url : user.banner_url
+  const [localPreview, setLocalPreview] = useState<string | null>(null)
+  const [pending, setPending] = useState<{ status: string; reason: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    fetch("/api/user/settings/image")
+      .then((r) => r.json())
+      .then((data) => setPending(data[kind] ?? null))
+      .catch(() => {})
+  }, [kind])
+
   const onFile = async (file: File) => {
-    setLoading(true)
     setError(null)
+    if (!file.type.startsWith("image/")) {
+      setError("Only image files are allowed.")
+      return
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError("Images must be 25 MB or smaller.")
+      return
+    }
+
+    setLoading(true)
     try {
-      const { uploadUrl, publicUrl } = await call("/api/user/settings/avatar-url", { contentType: file.type })
+      const endpoint = kind === "avatar" ? "/api/user/settings/avatar-url" : "/api/user/settings/banner-url"
+      const { uploadUrl, key } = await call(endpoint, { contentType: file.type, size: file.size })
       const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
       if (!put.ok) throw new Error("Upload failed.")
-      await call("/api/user/settings", { profilePictureUrl: publicUrl }, "PATCH")
-      setPreview(publicUrl)
+      await call("/api/user/settings/image", { kind, key })
+      setLocalPreview(URL.createObjectURL(file))
+      setPending({ status: "pending", reason: null })
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const displayUrl = localPreview ?? approvedUrl
+  const imgClass = shape === "circle" ? "size-14 rounded-full object-cover" : "h-16 w-full max-w-xs rounded-md object-cover"
+
+  return (
+    <Section title={label}>
+      <Msg error={error} info={null} />
+      {pending?.status === "pending" && (
+        <p className="mb-2 rounded-md bg-secondary px-3 py-2 text-xs text-secondary-foreground">
+          Your new {kind} is pending staff review.
+        </p>
+      )}
+      {pending?.status === "denied" && (
+        <p className="mb-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Your last {kind} was denied{pending.reason ? `: ${pending.reason}` : "."}
+        </p>
+      )}
+      <div className="flex items-center gap-4">
+        {displayUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={displayUrl} alt={label} className={imgClass} />
+        ) : shape === "circle" ? (
+          <div className="flex size-14 items-center justify-center rounded-full bg-secondary text-lg font-semibold text-secondary-foreground">
+            {user.username.slice(0, 1).toUpperCase()}
+          </div>
+        ) : (
+          <div className="flex h-16 w-full max-w-xs items-center justify-center rounded-md bg-secondary text-xs text-muted-foreground">
+            No banner
+          </div>
+        )}
+        <label className="cursor-pointer text-xs font-medium text-primary hover:underline">
+          {loading ? "Uploading…" : "Change"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={loading}
+            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+          />
+        </label>
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Images only (GIF ok, no video) · up to 25 MB · reviewed by staff before it's public
+      </p>
+    </Section>
+  )
+}
+
+// ---------------- bio ----------------
+
+function BioSection({ user }: { user: PublicUser }) {
+  const [bio, setBio] = useState(user.bio ?? "")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
+
+  const save = async () => {
+    setLoading(true)
+    setError(null)
+    setInfo(null)
+    try {
+      await call("/api/user/settings", { bio }, "PATCH")
+      setInfo("Bio updated.")
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -92,28 +196,71 @@ function AvatarSection({ user }: { user: PublicUser }) {
   }
 
   return (
-    <Section title="Profile picture">
-      <Msg error={error} info={null} />
-      <div className="flex items-center gap-4">
-        {preview ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="Profile" className="size-14 rounded-full object-cover" />
-        ) : (
-          <div className="flex size-14 items-center justify-center rounded-full bg-secondary text-lg font-semibold text-secondary-foreground">
-            {user.username.slice(0, 1).toUpperCase()}
-          </div>
-        )}
-        <label className="cursor-pointer text-xs font-medium text-primary hover:underline">
-          {loading ? "Uploading…" : "Change picture"}
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            className="hidden"
-            disabled={loading}
-            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-          />
-        </label>
+    <Section title="Bio">
+      <Msg error={error} info={info} />
+      <textarea
+        value={bio}
+        onChange={(e) => setBio(e.target.value)}
+        maxLength={280}
+        rows={3}
+        placeholder="Tell people a bit about yourself (no links)"
+        className="mb-2 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+      />
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-muted-foreground">{bio.length}/280 · no links allowed</span>
+        <Button onClick={save} loading={loading} label="Save" />
       </div>
+    </Section>
+  )
+}
+
+// ---------------- public links toggle ----------------
+
+function LinksPublicSection({ user }: { user: PublicUser }) {
+  const [enabled, setEnabled] = useState(user.links_public)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const toggle = async () => {
+    const next = !enabled
+    setLoading(true)
+    setError(null)
+    try {
+      await call("/api/user/settings", { linksPublic: next }, "PATCH")
+      setEnabled(next)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Section title="Public profile">
+      <Msg error={error} info={null} />
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs text-foreground">Make my uploaded links public</p>
+          <p className="text-[11px] text-muted-foreground">Shows your active links on your public profile page.</p>
+        </div>
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={loading}
+          aria-pressed={enabled}
+          className={`h-6 w-11 shrink-0 rounded-full transition-colors ${enabled ? "bg-primary" : "bg-secondary"}`}
+        >
+          <span
+            className={`block size-5 translate-x-0.5 rounded-full bg-background transition-transform ${enabled ? "translate-x-[22px]" : ""}`}
+          />
+        </button>
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Your public profile:{" "}
+        <a href={`/users/${user.username}`} className="text-primary hover:underline">
+          /users/{user.username}
+        </a>
+      </p>
     </Section>
   )
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { requireCurrentUser, AuthError, hashPassword, verifyPassword } from "@/lib/auth"
-import { usernameSchema, passwordSchema } from "@/lib/validators"
+import { usernameSchema, passwordSchema, bioSchema } from "@/lib/validators"
 
 export async function PATCH(req: Request) {
   try {
@@ -34,10 +34,22 @@ export async function PATCH(req: Request) {
       await sql`update users set password_hash = ${passwordHash} where id = ${user.id}`
     }
 
-    // ---- profile picture ----
-    if (typeof body.profilePictureUrl === "string") {
-      await sql`update users set profile_picture_url = ${body.profilePictureUrl} where id = ${user.id}`
+    // ---- bio (no links allowed) ----
+    if (typeof body.bio === "string") {
+      const parsed = bioSchema.safeParse(body.bio)
+      if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+      await sql`update users set bio = ${parsed.data || null} where id = ${user.id}`
     }
+
+    // ---- "make my uploaded links public" toggle ----
+    if (typeof body.linksPublic === "boolean") {
+      await sql`update users set links_public = ${body.linksPublic} where id = ${user.id}`
+    }
+
+    // Note: profile pictures and banners are no longer set directly here.
+    // They go through /api/user/settings/avatar-url (or banner-url) to get a
+    // presigned upload, then /api/user/settings/image to enter the
+    // moderation queue — see app/api/admin/moderation for the review step.
 
     return NextResponse.json({ ok: true })
   } catch (err) {

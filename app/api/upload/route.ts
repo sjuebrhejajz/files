@@ -4,6 +4,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 import { sql } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
+import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
 // 250 MB per file
 const MAX_BYTES = 250 * 1024 * 1024
@@ -28,6 +29,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Exceeds 250 MB limit" }, { status: 400 })
     }
 
+    const user = await getCurrentUser()
+
+    const ip = getClientIp(request)
+    if (await isBlacklisted({ ip, username: user?.username, email: user?.email })) {
+      return NextResponse.json({ error: "Uploads are not available for this account." }, { status: 403 })
+    }
+
     const shortId = crypto.randomUUID().replace(/-/g, "").slice(0, 8)
     const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_")
     // Timestamp + shortId + safe name so the cleanup cron can expire it after 7 days.
@@ -46,7 +54,6 @@ export async function POST(request: NextRequest) {
     // This row is written optimistically at presign time, before the browser's
     // PUT actually completes — same assumption the cleanup cron already makes
     // by trusting the timestamp embedded in the object key.
-    const user = await getCurrentUser()
     const expiresAt = new Date(Date.now() + EXPIRY_MS)
     await sql`
       insert into uploads (user_id, short_id, object_key, filename, content_type, size_bytes, expires_at)
