@@ -4,6 +4,7 @@ import { DonateBox } from "@/components/donate-box"
 import { UserMenu } from "@/components/auth/user-menu"
 import { Clock, ShieldCheck, Zap, Lock, Users as UsersIcon, HardDrive, Coins } from "lucide-react"
 import { sql } from "@/lib/db"
+import { neonFont } from "@/lib/fonts"
 
 async function getSiteStats() {
   const [userRows, fileRows, donationRows] = await Promise.all([
@@ -42,7 +43,9 @@ export default async function Page() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
                 <span className="relative inline-flex size-2.5 rounded-full bg-primary" />
               </span>
-              <h1 className="font-mono text-lg font-semibold tracking-tight text-foreground">files.uncertain.uk</h1>
+              <h1 className={`${neonFont.className} text-lg tracking-wide text-foreground [text-shadow:0_0_16px_var(--primary)]`}>
+                files.uncertain.uk
+              </h1>
             </div>
             <p className="max-w-md text-balance text-sm leading-relaxed text-muted-foreground">
               Private file hosting with instant, shareable links that embed inline in Discord. Files vanish after 7
@@ -114,7 +117,7 @@ export default async function Page() {
 
           <a
             href="/users"
-            className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
+            className="rounded-xl border border-border bg-card p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40"
           >
             <h2 className="mb-1 text-xs font-medium text-foreground">Community</h2>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -145,7 +148,7 @@ function Feature({
   return (
     <li
       style={{ animationDelay: `${delay}ms`, animationFillMode: "backwards" }}
-      className="animate-in fade-in slide-in-from-bottom-2 duration-500 flex flex-col gap-1.5 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40"
+      className="animate-in fade-in slide-in-from-bottom-2 duration-500 flex flex-col gap-1.5 rounded-lg border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40"
     >
       <span className="flex size-8 items-center justify-center rounded-md bg-secondary text-primary transition-transform duration-200 hover:scale-110">
         {icon}

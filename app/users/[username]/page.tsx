@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { MessageCircle } from "lucide-react"
 import { getPublicProfile } from "@/lib/profiles"
+import { neonFont } from "@/lib/fonts"
 import { RoleBadge } from "@/components/role-badge"
 import { DonatorBadge } from "@/components/donator-badge"
 import { ProfileAudioPlayer } from "@/components/profile-audio-player"
@@ -27,6 +28,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `${profile.username} — files.uncertain.uk` }
 }
 
+// Small pill/tag used for the badge-style facts under the header (Donator,
+// Discord, member-since, link count) — replaces plain inline text so they
+// read as distinct chips instead of a run-on sentence.
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
+      {children}
+    </span>
+  )
+}
+
 export default async function PublicProfilePage({ params }: Props) {
   const { username } = await params
   const profile = await getPublicProfile(username)
@@ -45,8 +57,11 @@ export default async function PublicProfilePage({ params }: Props) {
   return (
     <main className="relative mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 lg:max-w-4xl">
       {hasVideoBackground && <ProfileVideoBackground src={profile.video_url as string} />}
+
       <div
-        className={`mb-4 overflow-hidden rounded-xl border border-border bg-card ${hasVideoBackground ? "backdrop-blur-sm bg-card/80" : ""}`}
+        className={`animate-in fade-in slide-in-from-bottom-2 duration-500 mb-4 overflow-hidden rounded-xl border border-border bg-card transition-shadow ${
+          hasVideoBackground ? "bg-card/80 shadow-[0_0_40px_-12px_var(--primary)] backdrop-blur-md" : ""
+        }`}
       >
         {profile.banner_url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -65,7 +80,7 @@ export default async function PublicProfilePage({ params }: Props) {
               <img
                 src={profile.profile_picture_url}
                 alt={profile.username}
-                className="size-16 rounded-full border-4 border-card object-cover shadow-[0_0_24px_-4px_var(--primary)]"
+                className="size-16 rounded-full border-4 border-card object-cover shadow-[0_0_24px_-4px_var(--primary)] transition-shadow duration-300 hover:shadow-[0_0_32px_-2px_var(--primary)]"
               />
             ) : (
               <div className="flex size-16 items-center justify-center rounded-full border-4 border-card bg-secondary text-xl font-semibold text-secondary-foreground shadow-[0_0_24px_-4px_var(--primary)]">
@@ -73,41 +88,45 @@ export default async function PublicProfilePage({ params }: Props) {
               </div>
             )}
             <div className="flex items-center gap-1.5 pb-1">
-              <h1 className="text-lg font-semibold text-foreground">{profile.username}</h1>
+              <h1
+                className={`${neonFont.className} text-lg tracking-wide text-foreground [text-shadow:0_0_18px_var(--primary)]`}
+              >
+                {profile.username}
+              </h1>
               <RoleBadge role={profile.role} />
             </div>
           </div>
 
           {(profile.is_donator || profile.discord_username) && (
-            <div className="mt-8 flex flex-col items-end gap-1 pb-1">
+            <div className="mt-8 flex flex-col items-end gap-1.5 pb-1">
               {profile.is_donator && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground">Donator</span>
+                <Pill>
+                  Donator
                   <DonatorBadge />
-                </div>
+                </Pill>
               )}
               {profile.discord_username && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground">{profile.discord_username} on Discord</span>
+                <Pill>
+                  {profile.discord_username} on Discord
                   {profile.discord_avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={profile.discord_avatar_url} alt="" className="size-4 rounded-full" />
                   ) : (
-                    <MessageCircle className="size-3.5 text-muted-foreground" />
+                    <MessageCircle className="size-3.5" />
                   )}
-                </div>
+                </Pill>
               )}
             </div>
           )}
         </div>
 
         <div className="px-5 pb-5 pt-3">
-          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-            <span>Member since {memberSince}</span>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Pill>Member since {memberSince}</Pill>
             {profile.links !== null && (
-              <span>
+              <Pill>
                 {profile.links.length} link{profile.links.length === 1 ? "" : "s"} shared
-              </span>
+              </Pill>
             )}
           </div>
 
@@ -117,25 +136,29 @@ export default async function PublicProfilePage({ params }: Props) {
 
       {/* Player lives below the profile card now, not squeezed inside the bio area. */}
       {profile.music_enabled && profile.music_url && (
-        <div className="mb-6">
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 mb-6" style={{ animationDelay: "100ms", animationFillMode: "backwards" }}>
           <ProfileAudioPlayer src={profile.music_url} title={profile.music_title} />
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_260px]">
         <div>
-          <h2 className="mb-3 text-sm font-medium text-foreground">Links</h2>
+          <h2 className={`${neonFont.className} mb-3 text-sm tracking-wide text-foreground`}>Links</h2>
           {profile.links === null ? (
             <p className="text-xs text-muted-foreground">User disabled viewing.</p>
           ) : profile.links.length === 0 ? (
             <p className="text-xs text-muted-foreground">No active links.</p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {profile.links.map((link) => (
-                <li key={link.url}>
+              {profile.links.map((link, i) => (
+                <li
+                  key={link.url}
+                  className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+                  style={{ animationDelay: `${i * 40}ms`, animationFillMode: "backwards" }}
+                >
                   <a
                     href={link.viewUrl}
-                    className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5 transition-colors hover:border-primary/40"
+                    className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_0_16px_-6px_var(--primary)]"
                   >
                     <LinkPreview url={link.url} contentType={link.contentType} />
                     <div className="min-w-0 flex-1">
@@ -152,7 +175,7 @@ export default async function PublicProfilePage({ params }: Props) {
         {/* Desktop-only sidebar — keeps the wider lg: layout from looking sparse
             next to a short bio and a handful of links. */}
         <aside className="hidden flex-col gap-4 lg:flex">
-          <div className="rounded-xl border border-border bg-card p-4">
+          <div className="rounded-xl border border-border bg-card p-4 transition-colors duration-200 hover:border-primary/30">
             <h3 className="mb-2 text-xs font-medium text-foreground">About this profile</h3>
             <dl className="flex flex-col gap-1.5 text-xs text-muted-foreground">
               <div className="flex justify-between gap-3">
@@ -180,7 +203,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
           <a
             href="/"
-            className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
+            className="rounded-xl border border-border bg-card p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40"
           >
             <h3 className="mb-1 text-xs font-medium text-foreground">Get your own profile</h3>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
