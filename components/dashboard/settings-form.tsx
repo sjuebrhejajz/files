@@ -1,7 +1,17 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { Loader2, ShieldCheck, ShieldOff } from "lucide-react"
+import { useEffect, useState } from "react"
+import {
+  ArrowLeft,
+  KeyRound,
+  Link2,
+  Loader2,
+  ShieldCheck,
+  ShieldOff,
+  Sparkles,
+  User as UserIcon,
+} from "lucide-react"
+import type { ComponentType } from "react"
 import type { PublicUser } from "@/lib/auth"
 import { useTheme } from "@/components/theme-provider"
 
@@ -16,20 +26,104 @@ async function call(url: string, body: unknown, method: "POST" | "PATCH" = "POST
   return data
 }
 
+type Category = "profile" | "perks" | "connections" | "account"
+
+const CATEGORIES: { id: Category; label: string; description: string; icon: ComponentType<{ className?: string }> }[] = [
+  { id: "profile", label: "Profile", description: "Picture, banner, bio & public visibility", icon: UserIcon },
+  { id: "perks", label: "Perks", description: "Music widget & custom site theme", icon: Sparkles },
+  { id: "connections", label: "Connections", description: "Link your Discord account", icon: Link2 },
+  { id: "account", label: "Account", description: "Username, email, password & 2FA", icon: KeyRound },
+]
+
 export function SettingsForm({ user }: { user: PublicUser }) {
+  const [category, setCategory] = useState<Category | null>(null)
+
   return (
-    <div className="flex flex-col gap-8">
-      <ImageSection user={user} kind="avatar" label="Profile picture" shape="circle" />
-      <ImageSection user={user} kind="banner" label="Banner" shape="banner" />
-      <BioSection user={user} />
-      <LinksPublicSection user={user} />
-      <MusicSection />
-      <ThemeSection />
-      <DiscordSection />
-      <UsernameSection user={user} />
-      <EmailSection user={user} />
-      <PasswordSection />
-      <TwoFactorSection user={user} />
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+      {/* Persistent on desktop; the welcome view below covers navigation on mobile. */}
+      <nav className="hidden shrink-0 flex-col gap-1 lg:flex lg:w-56">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => setCategory(c.id)}
+            className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+              category === c.id
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+            }`}
+          >
+            <c.icon className="size-4" />
+            {c.label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="min-w-0 flex-1">
+        {category === null ? (
+          <WelcomeView user={user} onSelect={setCategory} />
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setCategory(null)}
+              className="mb-4 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
+            >
+              <ArrowLeft className="size-3.5" /> All settings
+            </button>
+            <div className="flex flex-col gap-8">
+              {category === "profile" && (
+                <>
+                  <ImageSection user={user} kind="avatar" label="Profile picture" shape="circle" />
+                  <ImageSection user={user} kind="banner" label="Banner" shape="banner" />
+                  <BioSection user={user} />
+                  <LinksPublicSection user={user} />
+                </>
+              )}
+              {category === "perks" && (
+                <>
+                  <MusicSection />
+                  <ThemeSection />
+                </>
+              )}
+              {category === "connections" && <DiscordSection />}
+              {category === "account" && (
+                <>
+                  <UsernameSection user={user} />
+                  <EmailSection user={user} />
+                  <PasswordSection />
+                  <TwoFactorSection user={user} />
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function WelcomeView({ user, onSelect }: { user: PublicUser; onSelect: (c: Category) => void }) {
+  return (
+    <div>
+      <h2 className="mb-1 text-base font-semibold text-foreground">Welcome, {user.username}</h2>
+      <p className="mb-6 text-xs text-muted-foreground">Pick a category to manage your account.</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => onSelect(c.id)}
+            className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/40"
+          >
+            <span className="flex size-8 items-center justify-center rounded-md bg-secondary text-foreground">
+              <c.icon className="size-4" />
+            </span>
+            <span className="text-sm font-medium text-foreground">{c.label}</span>
+            <span className="text-[11px] text-muted-foreground">{c.description}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -95,7 +189,6 @@ function ImageSection({
   const [pending, setPending] = useState<{ status: string; reason: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch("/api/user/settings/image")
@@ -160,26 +253,27 @@ function ImageSection({
             No banner
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={loading}
-          className="cursor-pointer rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
-        >
-          {loading ? "Uploading…" : "Change"}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          // sr-only, not hidden (display:none) — some mobile browsers silently
-          // no-op a programmatic .click() on a display:none input, which is
-          // exactly why this stopped opening the file picker after switching
-          // away from the <label> pattern.
-          className="sr-only"
-          disabled={loading}
-          onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-        />
+        <div className="relative inline-flex">
+          <span
+            aria-hidden
+            className="pointer-events-none flex items-center rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground"
+          >
+            {loading ? "Uploading…" : "Change"}
+          </span>
+          <input
+            type="file"
+            accept="image/*"
+            disabled={loading}
+            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+            // The real file input, sized and positioned exactly over the
+            // visible chip above and made fully transparent — the tap lands
+            // on this native input directly. No simulated click, no label
+            // delegation, no hiding technique to trust: this is the same
+            // pattern most production file-upload buttons use because it's
+            // the only one with zero cross-browser ambiguity.
+            className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+          />
+        </div>
       </div>
       <p className="mt-2 text-[11px] text-muted-foreground">
         Images only (GIF ok, no video) · up to 25 MB · reviewed by staff before it's public
@@ -288,7 +382,6 @@ function MusicSection() {
   const [status, setStatus] = useState<{ eligible: boolean; enabled: boolean; url: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch("/api/user/settings/music")
@@ -380,22 +473,21 @@ function MusicSection() {
         <p className="mb-3 text-xs text-muted-foreground">No track uploaded yet.</p>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={loading}
-          className="cursor-pointer rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
-        >
-          {loading ? "Working…" : status.url ? "Replace track" : "Upload track"}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="audio/mpeg,audio/mp3,.mp3"
-          className="sr-only"
-          disabled={loading}
-          onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-        />
+        <div className="relative inline-flex">
+          <span
+            aria-hidden
+            className="pointer-events-none flex items-center rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground"
+          >
+            {loading ? "Working…" : status.url ? "Replace track" : "Upload track"}
+          </span>
+          <input
+            type="file"
+            accept="audio/mpeg,audio/mp3,.mp3"
+            disabled={loading}
+            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+            className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+          />
+        </div>
         {status.url && (
           <>
             <button type="button" onClick={toggle} disabled={loading} className="text-xs font-medium text-foreground hover:underline">
@@ -427,7 +519,6 @@ function ThemeSection() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch("/api/user/settings/theme")
@@ -552,22 +643,21 @@ function ThemeSection() {
               {status.hasImage ? "A custom background is set." : "No custom background set."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={loading}
-            className="cursor-pointer rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
-          >
-            {loading ? "Working…" : status.hasImage ? "Replace image" : "Upload image"}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            disabled={loading}
-            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-          />
+          <div className="relative inline-flex">
+            <span
+              aria-hidden
+              className="pointer-events-none flex items-center rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground"
+            >
+              {loading ? "Working…" : status.hasImage ? "Replace image" : "Upload image"}
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              disabled={loading}
+              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+              className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+            />
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
