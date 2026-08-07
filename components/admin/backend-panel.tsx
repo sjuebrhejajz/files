@@ -6,6 +6,8 @@ import { Creepster } from "next/font/google"
 import {
   ArrowLeft,
   Ban,
+  Bug,
+  CircleDollarSign,
   Crown,
   ExternalLink,
   Loader2,
@@ -15,18 +17,20 @@ import {
   Trash2,
   UserMinus,
 } from "lucide-react"
-import type { PublicUser } from "@/lib/auth"
+import type { PublicUser, Role } from "@/lib/auth"
 import { RoleBadge } from "@/components/role-badge"
+import { DonatorBadge } from "@/components/donator-badge"
 
 const spooky = Creepster({ subsets: ["latin"], weight: "400" })
 
-type Tab = "users" | "blacklist" | "moderation"
+type Tab = "users" | "blacklist" | "moderation" | "uploads"
 
 type UserRow = {
   id: string
   username: string
   email: string
-  role: "user" | "moderator" | "admin"
+  role: Role
+  is_donator: boolean
   two_fa_enabled: boolean
   created_at: string
 }
@@ -93,7 +97,7 @@ export function BackendPanel({ currentUser }: { currentUser: PublicUser }) {
       </p>
 
       <div className="mb-6 flex gap-1 border-b border-border">
-        {(["users", "blacklist", "moderation"] as Tab[]).map((t) => (
+        {(["users", "blacklist", "moderation", "uploads"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -102,7 +106,7 @@ export function BackendPanel({ currentUser }: { currentUser: PublicUser }) {
               tab === t ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "moderation" ? "Moderation Queue" : t}
+            {t === "moderation" ? "Moderation Queue" : t === "uploads" ? "All Uploads" : t}
           </button>
         ))}
       </div>
@@ -110,6 +114,7 @@ export function BackendPanel({ currentUser }: { currentUser: PublicUser }) {
       {tab === "users" && <UsersTab isAdmin={isAdmin} currentUser={currentUser} />}
       {tab === "blacklist" && <BlacklistTab />}
       {tab === "moderation" && <ModerationTab />}
+      {tab === "uploads" && <UploadsTab />}
     </main>
   )
 }
@@ -178,6 +183,7 @@ function UsersTab({ isAdmin, currentUser }: { isAdmin: boolean; currentUser: Pub
                   <p className="flex items-center gap-1.5 truncate text-sm font-medium text-foreground">
                     {u.username}
                     <RoleBadge role={u.role} />
+                    {u.is_donator && <DonatorBadge />}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">{u.email}</p>
                 </div>
@@ -205,9 +211,7 @@ function UserDetail({
   const [data, setData] = useState<UserDetailData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
-  const [blacklistValue, setBlacklistValue] = useState("")
-  const [blacklistType, setBlacklistType] = useState<"ip" | "username" | "email">("username")
-  const [blacklistReason, setBlacklistReason] = useState("")
+  const [banReason, setBanReason] = useState("")
   const [newUsername, setNewUsername] = useState("")
 
   const load = useCallback(() => {
@@ -229,7 +233,9 @@ function UserDetail({
   const isSelf = target.id === currentUser.id
   const canRename = !isTargetAdmin && (!targetIsStaff || isAdmin)
 
-  const doRole = async (action: "promote" | "demote") => {
+  const doRole = async (
+    action: "promote" | "demote" | "make_tester" | "remove_tester" | "make_donator" | "remove_donator",
+  ) => {
     setActionLoading(true)
     setError(null)
     try {
@@ -259,16 +265,28 @@ function UserDetail({
     }
   }
 
-  const addBlacklist = async () => {
-    const value = blacklistType === "username" ? target.username : blacklistType === "email" ? target.email : blacklistValue
-    if (!value.trim()) return
+  const banUser = async () => {
+    const confirmed = window.confirm(
+      `Ban ${target.username}? This permanently deletes their account and all uploaded links. This can't be undone.`,
+    )
+    if (!confirmed) return
+
     setActionLoading(true)
     setError(null)
     try {
-      await call("/api/admin/blacklist", { type: blacklistType, value, reason: blacklistReason })
-      setBlacklistValue("")
-      setBlacklistReason("")
-      load()
+      const result = await call(`/api/admin/users/${encodeURIComponent(username)}/ban`, { reason: banReason })
+      const ips = (result.ips as string[]) ?? []
+      const addIps = window.confirm("User has been banned from platform. Would you also like to add them as an IP blacklist?")
+      if (addIps) {
+        for (const ip of ips) {
+          try {
+            await call("/api/admin/blacklist", { type: "ip", value: ip, reason: banReason || "Banned via admin panel" })
+          } catch {
+            // best-effort — one failed IP shouldn't block the rest
+          }
+        }
+      }
+      onBack()
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -318,6 +336,7 @@ function UserDetail({
             <p className="flex items-center gap-1.5 text-base font-semibold text-foreground">
               {target.username}
               <RoleBadge role={target.role} />
+              {target.is_donator && <DonatorBadge />}
             </p>
             <p className="truncate text-xs text-muted-foreground">{target.email}</p>
           </div>
@@ -333,7 +352,7 @@ function UserDetail({
           <span>Links public: {target.links_public ? "yes" : "no"}</span>
         </div>
 
-        {isAdmin && !targetIsStaff && !isSelf && (
+        {isAdmin && target.role === "user" && !isSelf && (
           <button
             type="button"
             disabled={actionLoading}
@@ -348,9 +367,49 @@ function UserDetail({
             type="button"
             disabled={actionLoading}
             onClick={() => doRole("demote")}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+            className="mt-3 mr-2 inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
           >
             <UserMinus className="size-3.5" /> Demote to user
+          </button>
+        )}
+        {isAdmin && target.role === "user" && !isSelf && (
+          <button
+            type="button"
+            disabled={actionLoading}
+            onClick={() => doRole("make_tester")}
+            className="mt-3 mr-2 inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+          >
+            <Bug className="size-3.5" /> Make tester
+          </button>
+        )}
+        {isAdmin && target.role === "tester" && !isSelf && (
+          <button
+            type="button"
+            disabled={actionLoading}
+            onClick={() => doRole("remove_tester")}
+            className="mt-3 mr-2 inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+          >
+            <UserMinus className="size-3.5" /> Remove tester
+          </button>
+        )}
+        {isAdmin && !target.is_donator && !isSelf && (
+          <button
+            type="button"
+            disabled={actionLoading}
+            onClick={() => doRole("make_donator")}
+            className="mt-3 mr-2 inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+          >
+            <CircleDollarSign className="size-3.5" /> Make donator
+          </button>
+        )}
+        {isAdmin && target.is_donator && !isSelf && (
+          <button
+            type="button"
+            disabled={actionLoading}
+            onClick={() => doRole("remove_donator")}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+          >
+            <UserMinus className="size-3.5" /> Remove donator
           </button>
         )}
       </div>
@@ -427,7 +486,7 @@ function UserDetail({
       </div>
 
       <div className="rounded-xl border border-border bg-card p-4">
-        <h3 className="mb-3 text-sm font-medium text-foreground">Blacklist</h3>
+        <h3 className="mb-3 text-sm font-medium text-foreground">Ban</h3>
 
         {data.blacklistHits.length > 0 && (
           <ul className="mb-3 flex flex-col gap-2">
@@ -449,41 +508,26 @@ function UserDetail({
         )}
 
         {targetIsStaff ? (
-          <p className="text-xs text-muted-foreground">Staff and the admin account can&apos;t be blacklisted.</p>
+          <p className="text-xs text-muted-foreground">Staff and the admin account can&apos;t be banned.</p>
         ) : (
           <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
-              <select
-                value={blacklistType}
-                onChange={(e) => setBlacklistType(e.target.value as "ip" | "username" | "email")}
-                className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none"
-              >
-                <option value="username">Username</option>
-                <option value="email">Email</option>
-                <option value="ip">IP</option>
-              </select>
-              <input
-                value={blacklistType === "username" ? target.username : blacklistType === "email" ? target.email : blacklistValue}
-                onChange={(e) => setBlacklistValue(e.target.value)}
-                disabled={blacklistType !== "ip"}
-                placeholder={blacklistType === "ip" ? "IP address" : "Value"}
-                className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary disabled:opacity-70"
-              />
-            </div>
             <input
-              value={blacklistReason}
-              onChange={(e) => setBlacklistReason(e.target.value)}
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
               placeholder="Reason (optional)"
               className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
             />
             <button
               type="button"
               disabled={actionLoading}
-              onClick={addBlacklist}
+              onClick={banUser}
               className="flex w-fit items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/20 disabled:opacity-60"
             >
-              <Ban className="size-3.5" /> Add to blacklist
+              <Ban className="size-3.5" /> Ban user
             </button>
+            <p className="text-[11px] text-muted-foreground">
+              Deletes their account and all uploaded links, and blacklists their username and email. This can&apos;t be undone.
+            </p>
           </div>
         )}
       </div>
@@ -492,6 +536,7 @@ function UserDetail({
 }
 
 // ==================== Blacklist tab ====================
+
 
 function BlacklistTab() {
   const [entries, setEntries] = useState<BlacklistEntry[] | null>(null)
@@ -690,6 +735,78 @@ function ModerationTab() {
                   <Ban className="size-3.5" /> Ban
                 </button>
               </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// ==================== All Uploads tab ====================
+
+type UploadRow = {
+  id: string
+  filename: string
+  uploader: string | null
+  url: string
+  viewUrl: string
+  createdAt: string
+  expiresAt: string
+}
+
+function UploadsTab() {
+  const [query, setQuery] = useState("")
+  const [uploads, setUploads] = useState<UploadRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    call(`/api/admin/uploads?q=${encodeURIComponent(query)}`, undefined, "GET")
+      .then((data) => setUploads(data.uploads))
+      .catch((err) => setError((err as Error).message))
+  }, [query])
+
+  useEffect(() => {
+    const handle = setTimeout(load, 250)
+    return () => clearTimeout(handle)
+  }, [load])
+
+  return (
+    <div className="flex flex-col gap-4">
+      {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
+
+      <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+        <Search className="size-3.5 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by filename or uploader…"
+          className="w-full bg-transparent text-sm text-foreground outline-none"
+        />
+      </div>
+
+      {!uploads ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : uploads.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No uploads found.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {uploads.map((f) => (
+            <li key={f.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground">{f.filename}</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {f.uploader ?? "anonymous"} · {new Date(f.createdAt).toLocaleString()}
+                </p>
+              </div>
+              <a
+                href={f.viewUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex shrink-0 items-center gap-1 text-xs text-primary hover:underline"
+              >
+                Preview <ExternalLink className="size-3" />
+              </a>
             </li>
           ))}
         </ul>

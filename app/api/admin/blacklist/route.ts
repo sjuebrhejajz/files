@@ -35,8 +35,6 @@ export async function POST(req: Request) {
     const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim().slice(0, 500) : null
 
     // Whitelist protection: staff and the admin account can never be blacklisted.
-    // (IP entries can't be attributed to a specific account, so this check only
-    // applies to username/email entries.)
     if (type.data === "username" || type.data === "email") {
       const lookupRows =
         type.data === "username"
@@ -44,6 +42,20 @@ export async function POST(req: Request) {
           : await sql`select username, role from users where lower(email) = ${value}`
       const match = lookupRows[0]
       if (match && (match.role === "moderator" || match.role === "admin" || String(match.username).toLowerCase() === "admin")) {
+        return NextResponse.json({ error: "Staff and the admin account can't be blacklisted." }, { status: 403 })
+      }
+    } else {
+      // type.data === "ip" — block it if any staff/admin account has ever logged
+      // in from this IP (tracked in user_ips), so staff can't accidentally lock
+      // themselves (or each other) out.
+      const staffIps = await sql`
+        select 1 from user_ips ui
+        join users u on u.id = ui.user_id
+        where ui.ip = ${value}
+          and (u.role = 'moderator' or u.role = 'admin' or lower(u.username) = 'admin')
+        limit 1
+      `
+      if (staffIps.length > 0) {
         return NextResponse.json({ error: "Staff and the admin account can't be blacklisted." }, { status: 403 })
       }
     }

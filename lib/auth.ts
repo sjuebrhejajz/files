@@ -10,7 +10,7 @@ const SESSION_DAYS_DEFAULT = 1 // if "remember this device" is not checked, sess
 const SESSION_DAYS_REMEMBERED = 30
 const DEVICE_DAYS = 60
 
-export type Role = "user" | "moderator" | "admin"
+export type Role = "user" | "moderator" | "admin" | "tester"
 
 export type PublicUser = {
   id: string
@@ -22,6 +22,7 @@ export type PublicUser = {
   links_public: boolean
   two_fa_enabled: boolean
   role: Role
+  is_donator: boolean
   created_at: string
 }
 
@@ -84,7 +85,7 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
 
   const rows = await sql`
     select u.id, u.email, u.username, u.profile_picture_url, u.banner_url, u.bio,
-           u.links_public, u.two_fa_enabled, u.role, u.created_at
+           u.links_public, u.two_fa_enabled, u.role, u.is_donator, u.created_at
     from sessions s
     join users u on u.id = s.user_id
     where s.token_hash = ${sha256(token)} and s.expires_at > now()
@@ -107,6 +108,10 @@ export function isStaff(user: Pick<PublicUser, "role">): boolean {
 
 export function isAdmin(user: Pick<PublicUser, "role">): boolean {
   return user.role === "admin"
+}
+
+export function isDonator(user: Pick<PublicUser, "is_donator">): boolean {
+  return user.is_donator === true
 }
 
 /** Throws 401 if not signed in, 403 if signed in but not moderator/admin. */

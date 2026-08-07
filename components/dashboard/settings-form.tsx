@@ -22,6 +22,8 @@ export function SettingsForm({ user }: { user: PublicUser }) {
       <ImageSection user={user} kind="banner" label="Banner" shape="banner" />
       <BioSection user={user} />
       <LinksPublicSection user={user} />
+      <MusicSection />
+      <ThemeSection />
       <UsernameSection user={user} />
       <EmailSection user={user} />
       <PasswordSection />
@@ -261,6 +263,294 @@ function LinksPublicSection({ user }: { user: PublicUser }) {
           /users/{user.username}
         </a>
       </p>
+    </Section>
+  )
+}
+
+// ---------------- profile music (donation-gated) ----------------
+
+const MAX_MUSIC_BYTES = 15 * 1024 * 1024 // 15 MB
+
+function MusicSection() {
+  const [status, setStatus] = useState<{ eligible: boolean; enabled: boolean; url: string | null } | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch("/api/user/settings/music")
+      .then((r) => r.json())
+      .then(setStatus)
+      .catch(() => setStatus({ eligible: false, enabled: false, url: null }))
+  }, [])
+
+  if (!status) return null
+
+  if (!status.eligible) {
+    return (
+      <Section title="Profile music">
+        <p className="text-xs text-muted-foreground">
+          Donate any amount to unlock a music widget for your public profile.
+        </p>
+      </Section>
+    )
+  }
+
+  const onFile = async (file: File) => {
+    setError(null)
+    if (file.type !== "audio/mpeg" && file.type !== "audio/mp3") {
+      setError("Only MP3 files are allowed.")
+      return
+    }
+    if (file.size > MAX_MUSIC_BYTES) {
+      setError("Track must be 15 MB or smaller.")
+      return
+    }
+    setLoading(true)
+    try {
+      const { uploadUrl, key } = await call("/api/user/settings/music-url", { contentType: file.type, size: file.size })
+      const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": "audio/mpeg" } })
+      if (!put.ok) throw new Error("Upload failed.")
+      await call("/api/user/settings/music", { key })
+      setStatus((s) => (s ? { ...s, url: `/a/${key}` } : s))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggle = async () => {
+    const next = !status.enabled
+    setLoading(true)
+    setError(null)
+    try {
+      await call("/api/user/settings/music", { enabled: next })
+      setStatus((s) => (s ? { ...s, enabled: next } : s))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const remove = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      await call("/api/user/settings/music", { remove: true })
+      setStatus({ eligible: true, enabled: false, url: null })
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Section title="Profile music">
+      <Msg error={error} info={null} />
+      <p className="mb-2 text-xs text-muted-foreground">
+        Thanks for donating! Add an MP3 that plays when someone visits your profile. Hidden from your profile until
+        you turn it on below.
+      </p>
+      {status.url ? (
+        <audio controls src={status.url} className="mb-3 w-full" />
+      ) : (
+        <p className="mb-3 text-xs text-muted-foreground">No track uploaded yet.</p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="cursor-pointer text-xs font-medium text-primary hover:underline">
+          {loading ? "Working…" : status.url ? "Replace track" : "Upload track"}
+          <input
+            type="file"
+            accept="audio/mpeg,audio/mp3"
+            className="hidden"
+            disabled={loading}
+            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+          />
+        </label>
+        {status.url && (
+          <>
+            <button type="button" onClick={toggle} disabled={loading} className="text-xs font-medium text-foreground hover:underline">
+              {status.enabled ? "Turn off on profile" : "Turn on for profile"}
+            </button>
+            <button type="button" onClick={remove} disabled={loading} className="text-xs font-medium text-destructive hover:underline">
+              Remove
+            </button>
+          </>
+        )}
+      </div>
+    </Section>
+  )
+}
+
+// ---------------- site theme (donator-gated) ----------------
+
+const MAX_THEME_IMAGE_BYTES = 25 * 1024 * 1024 // 25 MB
+
+function ThemeSection() {
+  const [status, setStatus] = useState<{
+    eligible: boolean
+    mode: "default" | "color" | "image"
+    color: string | null
+    hasImage: boolean
+  } | null>(null)
+  const [color, setColor] = useState("#ff00ff")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch("/api/user/settings/theme")
+      .then((r) => r.json())
+      .then((data) => {
+        setStatus(data)
+        if (data.color) setColor(data.color)
+      })
+      .catch(() => setStatus({ eligible: false, mode: "default", color: null, hasImage: false }))
+  }, [])
+
+  if (!status) return null
+
+  if (!status.eligible) {
+    return (
+      <Section title="Site theme">
+        <p className="text-xs text-muted-foreground">
+          Donate any amount to unlock a custom site theme — your own accent color or background image.
+        </p>
+      </Section>
+    )
+  }
+
+  const setDefault = async () => {
+    setLoading(true)
+    setError(null)
+    setInfo(null)
+    try {
+      await call("/api/user/settings/theme", { mode: "default" })
+      setStatus((s) => (s ? { ...s, mode: "default", hasImage: false } : s))
+      setInfo("Reset to the default theme.")
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const saveColor = async () => {
+    setLoading(true)
+    setError(null)
+    setInfo(null)
+    try {
+      await call("/api/user/settings/theme", { mode: "color", color })
+      setStatus((s) => (s ? { ...s, mode: "color", color } : s))
+      setInfo("Theme color updated.")
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const onFile = async (file: File) => {
+    setError(null)
+    if (file.type === "image/gif" || file.type.startsWith("video/")) {
+      setError("GIFs and videos aren't allowed for theme backgrounds.")
+      return
+    }
+    if (!file.type.startsWith("image/")) {
+      setError("Only image files are allowed.")
+      return
+    }
+    if (file.size > MAX_THEME_IMAGE_BYTES) {
+      setError("Image must be 25 MB or smaller.")
+      return
+    }
+    setLoading(true)
+    try {
+      const { uploadUrl, key } = await call("/api/user/settings/theme-url", { contentType: file.type, size: file.size })
+      const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
+      if (!put.ok) throw new Error("Upload failed.")
+      await call("/api/user/settings/theme", { mode: "image", key })
+      setStatus((s) => (s ? { ...s, mode: "image", hasImage: true } : s))
+      setInfo("Theme background updated.")
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Section title="Site theme">
+      <Msg error={error} info={info} />
+      <p className="mb-3 text-xs text-muted-foreground">
+        Thanks for donating! Personalize how the site looks while you&apos;re signed in — pick an accent color, or
+        upload your own background (static images only, up to 25 MB — no GIFs or video). Only you ever see it.
+      </p>
+
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-foreground">Accent color</p>
+            <p className="text-[11px] text-muted-foreground">Replaces the site&apos;s neon accent with your own color.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="size-9 cursor-pointer rounded-md border border-border bg-background p-1"
+            />
+            <button
+              type="button"
+              disabled={loading}
+              onClick={saveColor}
+              className="rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+            >
+              Use this color
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-foreground">Background image</p>
+            <p className="text-[11px] text-muted-foreground">
+              {status.hasImage ? "A custom background is set." : "No custom background set."}
+            </p>
+          </div>
+          <label className="cursor-pointer rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent">
+            {loading ? "Working…" : status.hasImage ? "Replace image" : "Upload image"}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={loading}
+              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+            />
+          </label>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <p className="text-[11px] text-muted-foreground">
+            Currently using:{" "}
+            <span className="font-medium text-foreground">
+              {status.mode === "default" ? "site default" : status.mode === "color" ? "your accent color" : "your background image"}
+            </span>
+          </p>
+          {status.mode !== "default" && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={setDefault}
+              className="text-xs font-medium text-foreground hover:underline"
+            >
+              Reset to default
+            </button>
+          )}
+        </div>
+      </div>
     </Section>
   )
 }

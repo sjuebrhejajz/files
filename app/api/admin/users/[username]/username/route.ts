@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
-import { requireStaff, isAdmin, AuthError } from "@/lib/auth"
+import { requireStaff, isAdmin, isStaff, AuthError } from "@/lib/auth"
 import { usernameSchema } from "@/lib/validators"
 import { isBlacklisted } from "@/lib/blacklist"
 
@@ -21,8 +21,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
     if (String(target.username).toLowerCase() === "admin") {
       return NextResponse.json({ error: "The admin account's username can't be changed." }, { status: 403 })
     }
-    // Moderators can rename regular users; only an admin can rename another staff account.
-    if (target.role !== "user" && !isAdmin(actor)) {
+    // Moderators can rename regular users and testers; only an admin can rename another staff account.
+    if (isStaff({ role: target.role }) && !isAdmin(actor)) {
       return NextResponse.json({ error: "Only admins can rename staff accounts." }, { status: 403 })
     }
 

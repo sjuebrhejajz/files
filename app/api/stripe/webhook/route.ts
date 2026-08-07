@@ -30,6 +30,11 @@ export async function POST(req: Request) {
         values (${userId}, ${amountCents}, ${session.id})
         on conflict (stripe_session_id) do nothing
       `
+      // Any amount unlocks donator status (badge, music widget, custom theme) —
+      // logged-out donations have no userId and can't be credited to an account.
+      if (userId) {
+        await sql`update users set is_donator = true where id = ${userId}`
+      }
     } catch (err) {
       console.error("[stripe/webhook] failed to record donation", err)
       return NextResponse.json({ error: "Could not record donation." }, { status: 500 })

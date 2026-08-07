@@ -1,6 +1,8 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { getCurrentUser } from '@/lib/auth'
+import { getUserTheme } from '@/lib/theme'
 
 export const metadata: Metadata = {
   title: 'files.uncertain.uk',
@@ -30,14 +32,32 @@ export const viewport: Viewport = {
   themeColor: '#0d1017',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const user = await getCurrentUser()
+  const theme = user ? await getUserTheme(user.id) : { mode: 'default' as const }
+
   return (
     <html lang="en" className="dark bg-background">
       <body className="antialiased">
+        {theme.mode === 'color' && (
+          // theme.color is validated against a strict 6-digit hex pattern in
+          // lib/theme.ts before it ever reaches here, so this is safe to inline
+          // as plain text (no dangerouslySetInnerHTML needed).
+          <style>{`:root { --primary: ${theme.color}; --ring: ${theme.color}; --sidebar-primary: ${theme.color}; }`}</style>
+        )}
+        {theme.mode === 'image' && (
+          <div
+            aria-hidden
+            className="fixed inset-0 -z-10 bg-cover bg-center"
+            style={{ backgroundImage: `url(${theme.imageUrl})` }}
+          >
+            <div className="absolute inset-0 bg-background/85" />
+          </div>
+        )}
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

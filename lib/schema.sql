@@ -99,9 +99,10 @@ alter table users add column if not exists role text not null default 'user';
 
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'users_role_check') then
-    alter table users add constraint users_role_check check (role in ('user', 'moderator', 'admin'));
+  if exists (select 1 from pg_constraint where conname = 'users_role_check') then
+    alter table users drop constraint users_role_check;
   end if;
+  alter table users add constraint users_role_check check (role in ('user', 'moderator', 'admin', 'tester'));
 end $$;
 
 alter table users add column if not exists bio text;
@@ -154,7 +155,37 @@ create table if not exists user_ips (
 
 create index if not exists idx_user_ips_user on user_ips(user_id);
 
--- Records the IP each session was created from, so staff can see a user's
--- recent IPs on their Backend profile and blacklist one directly from there.
-alter table sessions add column if not exists ip_address text;
-create index if not exists idx_sessions_ip on sessions(ip_address);
+-- Donation-gated profile music widget. Eligibility now lives on users.is_donator
+-- (see below) rather than being checked against the donations table each time.
+alter table users add column if not exists music_object_key text;
+alter table users add column if not exists music_enabled boolean not null default false;
+
+-- Cleanup: IP tracking ended up living on user_ips instead (populated by every
+-- login/register path). An earlier migration added sessions.ip_address but
+-- nothing ever actually wrote to it, so it was permanently null — drop it if
+-- present. This also drops idx_sessions_ip, since that index exists only on
+-- this column.
+alter table sessions drop column if exists ip_address;
+
+-- Donator status. Set automatically by the Stripe webhook on a completed
+-- donation, or can be granted/revoked manually by an admin (moderators can't —
+-- enforced in app/api/admin/users/[username]/role/route.ts). Backfills anyone
+-- who already has a donation on file.
+alter table users add column if not exists is_donator boolean not null default false;
+update users set is_donator = true where id in (select distinct user_id from donations where user_id is not null);
+
+-- Donator-only custom site theme: a single accent color, or a private
+-- background image (never shown to anyone but the owner and staff — see
+-- app/a/[...path]/route.ts). 'default' means no override (site neon theme).
+alter table users add column if not exists theme_mode text not null default 'default';
+
+do $$
+begin
+  if exists (select 1 from pg_constraint where conname = 'users_theme_mode_check') then
+    alter table users drop constraint users_theme_mode_check;
+  end if;
+  alter table users add constraint users_theme_mode_check check (theme_mode in ('default', 'color', 'image'));
+end $$;
+
+alter table users add column if not exists theme_color text;
+alter table users add column if not exists theme_image_key text;

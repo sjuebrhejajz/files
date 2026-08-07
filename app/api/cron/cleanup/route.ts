@@ -27,8 +27,14 @@ export async function GET(request: NextRequest) {
       )
       for (const obj of result.Contents ?? []) {
         if (!obj.Key) continue
-        // Profile pictures and banners don't expire — only files uploaded through the main uploader do.
-        if (obj.Key.startsWith("avatars/") || obj.Key.startsWith("banners/")) continue
+        // Profile pictures, banners, music tracks, and theme backgrounds don't expire — only files uploaded through the main uploader do.
+        if (
+          obj.Key.startsWith("avatars/") ||
+          obj.Key.startsWith("banners/") ||
+          obj.Key.startsWith("music/") ||
+          obj.Key.startsWith("themes/")
+        )
+          continue
         const name = obj.Key.split("/").pop() ?? ""
         const tsMatch = name.match(/^(\d+)__/)
         const uploadedAt = tsMatch ? Number(tsMatch[1]) : (obj.LastModified?.getTime() ?? now)

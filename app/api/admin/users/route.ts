@@ -10,14 +10,14 @@ export async function GET(req: Request) {
 
     const rows = q
       ? await sql`
-          select id, username, email, role, two_fa_enabled, created_at
+          select id, username, email, role, is_donator, two_fa_enabled, created_at
           from users
           where username ilike ${"%" + q + "%"} or email ilike ${"%" + q + "%"}
           order by created_at desc
           limit 100
         `
       : await sql`
-          select id, username, email, role, two_fa_enabled, created_at
+          select id, username, email, role, is_donator, two_fa_enabled, created_at
           from users
           order by created_at desc
           limit 100

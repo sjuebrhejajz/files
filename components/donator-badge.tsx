@@ -1,23 +1,11 @@
 "use client"
 
 import { useId, useState } from "react"
-import { Shield, Bug } from "lucide-react"
-import type { Role } from "@/lib/auth"
+import { CircleDollarSign } from "lucide-react"
 
-type IconComponent = React.ComponentType<{ className?: string }>
-
-const CONFIG: Partial<Record<Role, { label: string; className: string; icon: IconComponent }>> = {
-  admin: { label: "Site Administrator", className: "text-red-500", icon: Shield },
-  moderator: { label: "Moderator", className: "text-sky-400", icon: Shield },
-  tester: { label: "Bug Hunter", className: "text-lime-400", icon: Bug },
-}
-
-export function RoleBadge({ role }: { role: Role }) {
+export function DonatorBadge() {
   const [open, setOpen] = useState(false)
   const id = useId()
-  const config = CONFIG[role]
-  if (!config) return null
-  const Icon = config.icon
 
   return (
     <span
@@ -34,9 +22,9 @@ export function RoleBadge({ role }: { role: Role }) {
           setOpen((v) => !v)
         }}
         onBlur={() => setOpen(false)}
-        className={`inline-flex items-center ${config.className}`}
+        className="inline-flex items-center text-amber-400"
       >
-        <Icon className="size-3.5 fill-current" />
+        <CircleDollarSign className="size-3.5 fill-current" />
       </button>
       {open && (
         <span
@@ -44,7 +32,7 @@ export function RoleBadge({ role }: { role: Role }) {
           role="tooltip"
           className="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-card px-2 py-1 text-[11px] font-medium text-foreground shadow-lg"
         >
-          {config.label}
+          Donator
         </span>
       )}
     </span>

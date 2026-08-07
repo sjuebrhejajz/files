@@ -8,7 +8,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ usernam
     const { username } = await params
 
     const rows = await sql`
-      select id, username, email, role, bio, links_public, profile_picture_url, banner_url,
+      select id, username, email, role, is_donator, bio, links_public, profile_picture_url, banner_url,
              two_fa_enabled, created_at
       from users
       where lower(username) = ${username.toLowerCase()}
