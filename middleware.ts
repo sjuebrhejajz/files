@@ -7,8 +7,8 @@ import { rateLimit } from "@/lib/rate-limit"
 //   bucket with junk objects or run up R2 request costs.
 // - /api/presence: called every 8s per open tab already; a scripted client
 //   could call it far faster and generate a PutObject on every hit.
-// - /api/user/settings/avatar-url, banner-url, music-url, theme-url: same
-//   presign-abuse shape as /api/upload, just for profile/donator-perk images.
+// - /api/user/settings/*-url, /api/admin/badges/image-url: same
+//   presign-abuse shape as /api/upload, just for profile/donator-perk/badge images.
 const LIMITS: Record<string, { limit: number; windowMs: number }> = {
   "/api/upload": { limit: 20, windowMs: 60_000 }, // 20 presigns / min / IP
   "/api/presence": { limit: 30, windowMs: 60_000 }, // ~1 every 2s / IP
@@ -16,16 +16,39 @@ const LIMITS: Record<string, { limit: number; windowMs: number }> = {
   "/api/user/settings/banner-url": { limit: 10, windowMs: 60_000 },
   "/api/user/settings/music-url": { limit: 10, windowMs: 60_000 },
   "/api/user/settings/theme-url": { limit: 10, windowMs: 60_000 },
+  "/api/user/settings/video-url": { limit: 10, windowMs: 60_000 },
+  "/api/admin/badges/image-url": { limit: 10, windowMs: 60_000 },
 }
+
+// /a/ (avatars, banners, music, themes, profile videos, badges) has dynamic
+// subpaths, e.g. /a/video/<key>, so it can't live in the exact-path LIMITS
+// map above — it gets one shared per-IP bucket across every asset instead.
+// This is the main practical defense against bulk-scraping the bucket: 240
+// requests/min is generous for normal browsing (a single profile page can
+// load half a dozen assets) but throttles anything trying to walk through
+// many objects quickly.
+const ASSET_PREFIX = "/a/"
+const ASSET_LIMIT = { limit: 240, windowMs: 60_000 }
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
-  const rule = LIMITS[path]
-  if (!rule) return NextResponse.next()
-
   // x-forwarded-for is set by Vercel's edge network; not spoofable by the
   // client since Vercel overwrites it at the edge.
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+
+  if (path.startsWith(ASSET_PREFIX)) {
+    const { ok, remaining } = rateLimit(`${ip}:asset`, ASSET_LIMIT.limit, ASSET_LIMIT.windowMs)
+    if (!ok) {
+      return new NextResponse("Too many requests", { status: 429, headers: { "Retry-After": "60" } })
+    }
+    const res = NextResponse.next()
+    res.headers.set("X-RateLimit-Remaining", String(remaining))
+    return res
+  }
+
+  const rule = LIMITS[path]
+  if (!rule) return NextResponse.next()
+
   const { ok, remaining } = rateLimit(`${ip}:${path}`, rule.limit, rule.windowMs)
 
   if (!ok) {
@@ -48,5 +71,8 @@ export const config = {
     "/api/user/settings/banner-url",
     "/api/user/settings/music-url",
     "/api/user/settings/theme-url",
+    "/api/user/settings/video-url",
+    "/api/admin/badges/image-url",
+    "/a/:path*",
   ],
 }

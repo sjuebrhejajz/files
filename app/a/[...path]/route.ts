@@ -6,6 +6,23 @@ import { getCurrentUser, isStaff } from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
+// Blocks other sites from directly embedding/hotlinking these assets — the
+// main practical "anti scraper" measure available here, alongside the
+// per-IP rate limit in middleware.ts. Missing referers (direct navigation,
+// bookmarks, privacy-focused browsers that strip it) are allowed through;
+// only a referer that's clearly *another site* gets rejected.
+function isAllowedReferer(request: NextRequest): boolean {
+  const referer = request.headers.get("referer")
+  if (!referer) return true
+  try {
+    const refererHost = new URL(referer).host
+    const requestHost = request.headers.get("host")
+    return !requestHost || refererHost === requestHost
+  } catch {
+    return true
+  }
+}
+
 // Serves avatar/banner/music/theme/video/badge files directly by their known
 // object key. Unlike /f/[id], which resolves an opaque short id by scanning
 // the whole bucket, these keys are predictable (avatars/<userId>-<ts>.<ext>,
@@ -24,6 +41,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   // Only ever serve objects under these prefixes through this route.
   if (!isImage && !isMusic && !isTheme && !isVideo && !isBadge) {
+    return new NextResponse("Not found", { status: 404 })
+  }
+
+  if (!isAllowedReferer(request)) {
     return new NextResponse("Not found", { status: 404 })
   }
 
