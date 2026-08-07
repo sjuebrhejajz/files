@@ -24,9 +24,12 @@ export function ThemeProvider({ initial, children }: { initial: ClientTheme; chi
       {theme.mode === "color" && HEX_COLOR_PATTERN.test(theme.color) && (
         // Rendered declaratively from state (not injected via useEffect), so a
         // change from settings takes effect the instant setTheme runs — no
-        // page reload needed, and the server-rendered value on first load
-        // matches immediately with zero flash of the default theme.
-        <style>{`:root { --primary: ${theme.color}; --ring: ${theme.color}; --sidebar-primary: ${theme.color}; --sidebar-ring: ${theme.color}; }`}</style>
+        // page reload needed. !important is deliberate: React/Next.js hoist
+        // <style> tags into <head> for dedup regardless of where they're
+        // rendered in the tree, so this tag's position relative to
+        // globals.css isn't reliably "after" it — cascade order alone can't
+        // be trusted to make this override win.
+        <style>{`:root { --primary: ${theme.color} !important; --ring: ${theme.color} !important; --sidebar-primary: ${theme.color} !important; --sidebar-ring: ${theme.color} !important; }`}</style>
       )}
       {theme.mode === "image" && (
         <div

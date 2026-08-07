@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Loader2, ShieldCheck, ShieldOff } from "lucide-react"
 import type { PublicUser } from "@/lib/auth"
 import { useTheme } from "@/components/theme-provider"
@@ -94,6 +94,7 @@ function ImageSection({
   const [pending, setPending] = useState<{ status: string; reason: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch("/api/user/settings/image")
@@ -158,16 +159,22 @@ function ImageSection({
             No banner
           </div>
         )}
-        <label className="cursor-pointer text-xs font-medium text-primary hover:underline">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={loading}
+          className="cursor-pointer text-xs font-medium text-primary hover:underline disabled:opacity-60"
+        >
           {loading ? "Uploading…" : "Change"}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            disabled={loading}
-            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-          />
-        </label>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={loading}
+          onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+        />
       </div>
       <p className="mt-2 text-[11px] text-muted-foreground">
         Images only (GIF ok, no video) · up to 25 MB · reviewed by staff before it's public
@@ -276,6 +283,7 @@ function MusicSection() {
   const [status, setStatus] = useState<{ eligible: boolean; enabled: boolean; url: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch("/api/user/settings/music")
@@ -367,16 +375,22 @@ function MusicSection() {
         <p className="mb-3 text-xs text-muted-foreground">No track uploaded yet.</p>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <label className="cursor-pointer text-xs font-medium text-primary hover:underline">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={loading}
+          className="cursor-pointer text-xs font-medium text-primary hover:underline disabled:opacity-60"
+        >
           {loading ? "Working…" : status.url ? "Replace track" : "Upload track"}
-          <input
-            type="file"
-            accept="audio/mpeg,audio/mp3"
-            className="hidden"
-            disabled={loading}
-            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-          />
-        </label>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="audio/mpeg,audio/mp3,.mp3"
+          className="hidden"
+          disabled={loading}
+          onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+        />
         {status.url && (
           <>
             <button type="button" onClick={toggle} disabled={loading} className="text-xs font-medium text-foreground hover:underline">
@@ -408,6 +422,7 @@ function ThemeSection() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch("/api/user/settings/theme")
@@ -532,16 +547,22 @@ function ThemeSection() {
               {status.hasImage ? "A custom background is set." : "No custom background set."}
             </p>
           </div>
-          <label className="cursor-pointer rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className="cursor-pointer rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+          >
             {loading ? "Working…" : status.hasImage ? "Replace image" : "Upload image"}
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              disabled={loading}
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-            />
-          </label>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={loading}
+            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+          />
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
