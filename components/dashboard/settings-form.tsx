@@ -172,7 +172,11 @@ function ImageSection({
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          className="hidden"
+          // sr-only, not hidden (display:none) — some mobile browsers silently
+          // no-op a programmatic .click() on a display:none input, which is
+          // exactly why this stopped opening the file picker after switching
+          // away from the <label> pattern.
+          className="sr-only"
           disabled={loading}
           onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
         />
@@ -388,7 +392,7 @@ function MusicSection() {
           ref={fileInputRef}
           type="file"
           accept="audio/mpeg,audio/mp3,.mp3"
-          className="hidden"
+          className="sr-only"
           disabled={loading}
           onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
         />
@@ -560,7 +564,7 @@ function ThemeSection() {
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            className="hidden"
+            className="sr-only"
             disabled={loading}
             onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
           />

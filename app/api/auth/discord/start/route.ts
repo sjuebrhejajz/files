@@ -10,8 +10,7 @@ export async function GET(req: Request) {
   }
 
   const state = randomBytes(16).toString("hex")
-  const redirectUri = new URL("/api/auth/discord/callback", req.url).toString()
-  const authUrl = getDiscordAuthUrl(state, redirectUri)
+  const authUrl = getDiscordAuthUrl(state)
 
   const res = NextResponse.redirect(authUrl)
   // Verified against on callback to prevent a forged/replayed redirect from

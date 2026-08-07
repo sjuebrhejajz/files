@@ -1,9 +1,22 @@
 const DISCORD_API = "https://discord.com/api/v10"
 
-export function getDiscordAuthUrl(state: string, redirectUri: string): string {
+// A fixed value, not derived from the incoming request. Discord requires an
+// EXACT string match against what's registered in the Developer Portal, and
+// behind Vercel's edge network the protocol/host Next.js sees isn't
+// guaranteed to exactly match your custom domain on every request — that
+// mismatch is what "Invalid OAuth2 redirect_uri" means. Set this once as an
+// env var to the exact same URL registered in the Discord Developer Portal:
+// https://files.uncertain.uk/api/auth/discord/callback
+function redirectUri(): string {
+  const uri = process.env.DISCORD_REDIRECT_URI
+  if (!uri) throw new Error("DISCORD_REDIRECT_URI is not configured.")
+  return uri
+}
+
+export function getDiscordAuthUrl(state: string): string {
   const params = new URLSearchParams({
     client_id: process.env.DISCORD_CLIENT_ID as string,
-    redirect_uri: redirectUri,
+    redirect_uri: redirectUri(),
     response_type: "code",
     // "identify" is the minimum scope needed for username + avatar — no email,
     // no guild list, no other data.
@@ -13,7 +26,7 @@ export function getDiscordAuthUrl(state: string, redirectUri: string): string {
   return `https://discord.com/oauth2/authorize?${params.toString()}`
 }
 
-export async function exchangeDiscordCode(code: string, redirectUri: string): Promise<{ access_token: string }> {
+export async function exchangeDiscordCode(code: string): Promise<{ access_token: string }> {
   const res = await fetch(`${DISCORD_API}/oauth2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -22,7 +35,9 @@ export async function exchangeDiscordCode(code: string, redirectUri: string): Pr
       client_secret: process.env.DISCORD_CLIENT_SECRET as string,
       grant_type: "authorization_code",
       code,
-      redirect_uri: redirectUri,
+      // Must match the redirect_uri used in the authorize step exactly, or
+      // Discord rejects the token exchange too.
+      redirect_uri: redirectUri(),
     }),
   })
   if (!res.ok) throw new Error("Discord token exchange failed.")

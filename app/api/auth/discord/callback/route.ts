@@ -24,8 +24,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const redirectUri = new URL("/api/auth/discord/callback", req.url).toString()
-    const token = await exchangeDiscordCode(code, redirectUri)
+    const token = await exchangeDiscordCode(code)
     const discordUser = await fetchDiscordUser(token.access_token)
 
     // One Discord account can only ever be linked to one site account.
