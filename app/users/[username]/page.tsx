@@ -10,6 +10,16 @@ import { ProfileVideoBackground } from "@/components/profile-video-background"
 
 type Props = { params: Promise<{ username: string }> }
 
+// This page reads live per-user data (video/music toggles, bio, badges,
+// links) straight from the database on every request, and none of that
+// counts as a Next.js "dynamic API" (no cookies()/headers() call happens
+// here) — so without this, Next.js has no signal that the page depends on
+// anything request-specific and silently caches the rendered HTML. That's
+// exactly why toggling something in Settings didn't show up here until the
+// next full deploy: this line forces a fresh render (and fresh DB read) on
+// every visit instead.
+export const dynamic = "force-dynamic"
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { username } = await params
   const profile = await getPublicProfile(username)

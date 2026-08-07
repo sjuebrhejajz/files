@@ -18,6 +18,12 @@ async function getSiteStats() {
   }
 }
 
+// Reads live counts straight from the database with no cookies()/headers()
+// call anywhere on this page, so Next.js had no signal to treat it as
+// per-request — it was caching the rendered stats indefinitely instead of
+// refreshing them.
+export const dynamic = "force-dynamic"
+
 export default async function Page() {
   const stats = await getSiteStats()
 
