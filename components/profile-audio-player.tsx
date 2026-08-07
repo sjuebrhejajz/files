@@ -3,7 +3,7 @@
 import { useRef, useState } from "react"
 import { Pause, Play, Volume2, VolumeX } from "lucide-react"
 
-export function ProfileAudioPlayer({ src }: { src: string }) {
+export function ProfileAudioPlayer({ src, title }: { src: string; title: string | null }) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(false)
@@ -34,7 +34,7 @@ export function ProfileAudioPlayer({ src }: { src: string }) {
       </button>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground">Profile music</p>
+        <p className="truncate text-xs font-medium text-foreground">{title || "Profile music"}</p>
         <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-border">
           <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
         </div>

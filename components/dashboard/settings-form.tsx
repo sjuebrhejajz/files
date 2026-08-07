@@ -91,7 +91,7 @@ export function SettingsForm({ user }: { user: PublicUser }) {
                 <>
                   <UsernameSection user={user} />
                   <EmailSection user={user} />
-                  <PasswordSection />
+                  <PasswordSection user={user} />
                   <TwoFactorSection user={user} />
                 </>
               )}
@@ -379,15 +379,22 @@ function LinksPublicSection({ user }: { user: PublicUser }) {
 const MAX_MUSIC_BYTES = 15 * 1024 * 1024 // 15 MB
 
 function MusicSection() {
-  const [status, setStatus] = useState<{ eligible: boolean; enabled: boolean; url: string | null } | null>(null)
+  const [status, setStatus] = useState<{ eligible: boolean; enabled: boolean; url: string | null; title: string | null } | null>(
+    null,
+  )
+  const [titleInput, setTitleInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/user/settings/music")
       .then((r) => r.json())
-      .then(setStatus)
-      .catch(() => setStatus({ eligible: false, enabled: false, url: null }))
+      .then((data) => {
+        setStatus(data)
+        setTitleInput(data.title ?? "")
+      })
+      .catch(() => setStatus({ eligible: false, enabled: false, url: null, title: null }))
   }, [])
 
   if (!status) return null
@@ -452,7 +459,23 @@ function MusicSection() {
     setError(null)
     try {
       await call("/api/user/settings/music", { remove: true })
-      setStatus({ eligible: true, enabled: false, url: null })
+      setStatus({ eligible: true, enabled: false, url: null, title: null })
+      setTitleInput("")
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const saveTitle = async () => {
+    setLoading(true)
+    setError(null)
+    setInfo(null)
+    try {
+      await call("/api/user/settings/music", { title: titleInput })
+      setStatus((s) => (s ? { ...s, title: titleInput.trim() || null } : s))
+      setInfo("Track name updated.")
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -462,7 +485,7 @@ function MusicSection() {
 
   return (
     <Section title="Profile music">
-      <Msg error={error} info={null} />
+      <Msg error={error} info={info} />
       <p className="mb-2 text-xs text-muted-foreground">
         Thanks for donating! Add an MP3 that plays when someone visits your profile. Hidden from your profile until
         you turn it on below.
@@ -471,6 +494,17 @@ function MusicSection() {
         <audio controls src={status.url} className="mb-3 w-full" />
       ) : (
         <p className="mb-3 text-xs text-muted-foreground">No track uploaded yet.</p>
+      )}
+      {status.url && (
+        <div className="mb-3 flex gap-2">
+          <Input
+            value={titleInput}
+            onChange={(e) => setTitleInput(e.target.value)}
+            placeholder="Track name (shown instead of “Profile music”)"
+            maxLength={60}
+          />
+          <Button onClick={saveTitle} loading={loading} label="Save" />
+        </div>
       )}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative inline-flex">
@@ -783,6 +817,8 @@ function DiscordSection() {
 
 function UsernameSection({ user }: { user: PublicUser }) {
   const [username, setUsername] = useState(user.username)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [code, setCode] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -792,8 +828,10 @@ function UsernameSection({ user }: { user: PublicUser }) {
     setError(null)
     setInfo(null)
     try {
-      await call("/api/user/settings", { username }, "PATCH")
+      await call("/api/user/settings", { username, currentPassword, code }, "PATCH")
       setInfo("Username updated.")
+      setCurrentPassword("")
+      setCode("")
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -804,11 +842,28 @@ function UsernameSection({ user }: { user: PublicUser }) {
   return (
     <Section title="Username">
       <Msg error={error} info={info} />
-      <div className="flex gap-2">
-        <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+      <div className="flex flex-col gap-2">
+        <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" />
+        <Input
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          type="password"
+          placeholder="Current password"
+        />
+        {user.two_fa_enabled && (
+          <Input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="6-digit 2FA code"
+          />
+        )}
         <Button onClick={save} loading={loading} label="Save" />
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">5–20 characters, letters and numbers only.</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        5–20 characters, letters and numbers only. Requires your password{user.two_fa_enabled ? " and 2FA code" : ""}.
+      </p>
     </Section>
   )
 }
@@ -873,9 +928,10 @@ function EmailSection({ user }: { user: PublicUser }) {
 
 // ---------------- password ----------------
 
-function PasswordSection() {
+function PasswordSection({ user }: { user: PublicUser }) {
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
+  const [code, setCode] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -885,10 +941,11 @@ function PasswordSection() {
     setError(null)
     setInfo(null)
     try {
-      await call("/api/user/settings", { currentPassword, newPassword }, "PATCH")
+      await call("/api/user/settings", { currentPassword, newPassword, code }, "PATCH")
       setInfo("Password updated.")
       setCurrentPassword("")
       setNewPassword("")
+      setCode("")
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -907,6 +964,15 @@ function PasswordSection() {
           onChange={(e) => setCurrentPassword(e.target.value)}
         />
         <Input placeholder="New password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+        {user.two_fa_enabled && (
+          <Input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="6-digit 2FA code"
+          />
+        )}
         <Button onClick={save} loading={loading} label="Update password" />
       </div>
     </Section>

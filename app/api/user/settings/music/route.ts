@@ -5,12 +5,14 @@ import { r2, BUCKET_NAME } from "@/lib/r2"
 import { requireCurrentUser, AuthError } from "@/lib/auth"
 import { hasDonatorPerks } from "@/lib/donations"
 
+const MAX_TITLE_LENGTH = 60
+
 export async function GET() {
   try {
     const user = await requireCurrentUser()
     const eligible = hasDonatorPerks(user)
 
-    const rows = await sql`select music_object_key, music_enabled from users where id = ${user.id}`
+    const rows = await sql`select music_object_key, music_enabled, music_title from users where id = ${user.id}`
     const row = rows[0]
     const key = row?.music_object_key as string | null
 
@@ -18,6 +20,7 @@ export async function GET() {
       eligible,
       enabled: Boolean(row?.music_enabled),
       url: key ? `/a/${key}` : null,
+      title: (row?.music_title as string | null) ?? null,
     })
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status })
@@ -46,7 +49,7 @@ export async function POST(req: Request) {
           console.error("[user/settings/music] r2 delete failed:", e)
         }
       }
-      await sql`update users set music_object_key = null, music_enabled = false where id = ${user.id}`
+      await sql`update users set music_object_key = null, music_enabled = false, music_title = null where id = ${user.id}`
       return NextResponse.json({ ok: true })
     }
 
@@ -65,6 +68,12 @@ export async function POST(req: Request) {
         }
       }
       await sql`update users set music_object_key = ${key} where id = ${user.id}`
+    }
+
+    // ---- rename the track ----
+    if (typeof body.title === "string") {
+      const title = body.title.trim().slice(0, MAX_TITLE_LENGTH)
+      await sql`update users set music_title = ${title || null} where id = ${user.id}`
     }
 
     // ---- toggle visibility on the public profile ----

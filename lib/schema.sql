@@ -198,3 +198,7 @@ alter table users add column if not exists discord_username text;
 alter table users add column if not exists discord_avatar_url text;
 
 create unique index if not exists idx_users_discord_id on users(discord_id) where discord_id is not null;
+
+-- Optional display name for the profile music track, shown instead of the
+-- generic "Profile music" label. Purely cosmetic — no validation beyond length.
+alter table users add column if not exists music_title text;

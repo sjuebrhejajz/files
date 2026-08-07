@@ -98,7 +98,7 @@ export default async function PublicProfilePage({ params }: Props) {
       {/* Player lives below the profile card now, not squeezed inside the bio area. */}
       {profile.music_enabled && profile.music_url && (
         <div className="mb-6">
-          <ProfileAudioPlayer src={profile.music_url} />
+          <ProfileAudioPlayer src={profile.music_url} title={profile.music_title} />
         </div>
       )}
 
