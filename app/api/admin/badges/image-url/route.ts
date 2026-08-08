@@ -4,11 +4,14 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { requireAdmin, AuthError } from "@/lib/auth"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 
+// SECURITY: SVG dropped — it can embed <script> and execute if ever viewed
+// via direct navigation (see app/a/[...path]/route.ts and app/f/[id]/route.ts
+// for the serving-side defense against this too). No reason a badge icon
+// specifically needs SVG over PNG/JPEG/WebP.
 const ALLOWED_TYPES: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/webp": "webp",
-  "image/svg+xml": "svg",
 }
 const MAX_BYTES = 2 * 1024 * 1024 // 2 MB — these are small badge icons
 
@@ -21,7 +24,7 @@ export async function POST(req: Request) {
 
     const ext = ALLOWED_TYPES[contentType]
     if (!ext) {
-      return NextResponse.json({ error: "Only PNG, JPEG, WebP, or SVG images are allowed." }, { status: 400 })
+      return NextResponse.json({ error: "Only PNG, JPEG, or WebP images are allowed." }, { status: 400 })
     }
     if (!size || size > MAX_BYTES) {
       return NextResponse.json({ error: "Badge image must be 2 MB or smaller." }, { status: 400 })

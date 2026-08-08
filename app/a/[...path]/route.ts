@@ -6,22 +6,17 @@ import { getCurrentUser, isStaff } from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
-// Blocks other sites from directly embedding/hotlinking these assets — the
-// main practical "anti scraper" measure available here, alongside the
-// per-IP rate limit in middleware.ts. Missing referers (direct navigation,
-// bookmarks, privacy-focused browsers that strip it) are allowed through;
-// only a referer that's clearly *another site* gets rejected.
-function isAllowedReferer(request: NextRequest): boolean {
-  const referer = request.headers.get("referer")
-  if (!referer) return true
-  try {
-    const refererHost = new URL(referer).host
-    const requestHost = request.headers.get("host")
-    return !requestHost || refererHost === requestHost
-  } catch {
-    return true
-  }
-}
+// SECURITY: this route never set Content-Disposition, which means a browser
+// navigating directly to a URL it serves falls back to its own default —
+// inline rendering for any content type it recognizes, including
+// image/svg+xml. SVG can embed <script> and execute on this origin if
+// rendered that way (see app/f/[id]/route.ts for the same issue, confirmed
+// via an actual malicious upload). Every current upload path into this
+// route is already restricted to safe raster formats at upload time
+// (avatars/banners/badges: PNG/JPEG/WebP/GIF, no SVG), but this is enforced
+// here too as a safety net — so a future feature added to this route can't
+// reintroduce the same hole just by forgetting to exclude SVG at upload time.
+const DANGEROUS_INLINE_TYPES = new Set(["text/html", "application/xhtml+xml", "image/svg+xml"])
 
 // Serves avatar/banner/music/theme/video/badge files directly by their known
 // object key. Unlike /f/[id], which resolves an opaque short id by scanning
@@ -41,10 +36,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   // Only ever serve objects under these prefixes through this route.
   if (!isImage && !isMusic && !isTheme && !isVideo && !isBadge) {
-    return new NextResponse("Not found", { status: 404 })
-  }
-
-  if (!isAllowedReferer(request)) {
     return new NextResponse("Not found", { status: 404 })
   }
 
@@ -98,8 +89,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const object = await r2.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }))
 
+    const rawContentType = object.ContentType ?? "application/octet-stream"
+    const isDangerous = DANGEROUS_INLINE_TYPES.has(rawContentType.split(";")[0].trim().toLowerCase())
+
     const headers = new Headers()
-    headers.set("Content-Type", object.ContentType ?? "application/octet-stream")
+    headers.set("Content-Type", isDangerous ? "application/octet-stream" : rawContentType)
+    if (isDangerous) headers.set("Content-Disposition", "attachment")
+    headers.set("X-Content-Type-Options", "nosniff")
     // Never let a shared/CDN cache hold onto an unapproved image, a disabled
     // track, or a private theme background.
     headers.set("Cache-Control", isPublic ? "public, max-age=86400, immutable" : "private, no-store")
