@@ -3,6 +3,15 @@ import { sql } from "@/lib/db"
 import { requireStaff, isAdmin, isStaff, AuthError } from "@/lib/auth"
 import { usernameSchema } from "@/lib/validators"
 import { isBlacklisted } from "@/lib/blacklist"
+import { logModAction } from "@/lib/mod-log"
+
+// SECURITY: explicit, independent of the Cache-Control header middleware.ts
+// also sets on all /api/admin/* and /api/user/* routes. This stops Next.js
+// from ever treating the route as cacheable in the first place. Added after
+// confirming an admin-only endpoint's response was being served to a
+// signed-out incognito request — nothing here previously told Next.js this
+// data depends on who's asking.
+export const dynamic = "force-dynamic"
 
 export async function POST(req: Request, { params }: { params: Promise<{ username: string }> }) {
   try {
@@ -33,7 +42,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
     const taken = await sql`select id from users where lower(username) = ${newUsername.toLowerCase()} and id != ${target.id}`
     if (taken.length > 0) return NextResponse.json({ error: "This username is already taken." }, { status: 409 })
 
+    const oldUsername = target.username as string
     await sql`update users set username = ${newUsername} where id = ${target.id}`
+    await logModAction(actor, "force_rename", oldUsername, `renamed to: ${newUsername}`)
 
     return NextResponse.json({ ok: true, username: newUsername })
   } catch (err) {

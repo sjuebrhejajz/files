@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server"
-import { DeleteObjectCommand } from "@aws-sdk/client-s3"
 import { sql } from "@/lib/db"
-import { r2, BUCKET_NAME } from "@/lib/r2"
 import { requireStaff, AuthError } from "@/lib/auth"
+import { purgeAccount } from "@/lib/purge-account"
+import { logModAction } from "@/lib/mod-log"
+
+// SECURITY: explicit, independent of the Cache-Control header middleware.ts
+// also sets on all /api/admin/* and /api/user/* routes. This stops Next.js
+// from ever treating the route as cacheable in the first place. Added after
+// confirming an admin-only endpoint's response was being served to a
+// signed-out incognito request — nothing here previously told Next.js this
+// data depends on who's asking.
+export const dynamic = "force-dynamic"
 
 export async function POST(req: Request, { params }: { params: Promise<{ username: string }> }) {
   try {
@@ -12,8 +20,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
     const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim().slice(0, 500) : null
 
     const rows = await sql`
-      select id, username, email, role, music_object_key, theme_image_key from users
-      where lower(username) = ${username.toLowerCase()}
+      select id, username, email, role from users where lower(username) = ${username.toLowerCase()}
     `
     const target = rows[0]
     if (!target) return NextResponse.json({ error: "User not found." }, { status: 404 })
@@ -24,28 +31,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
       return NextResponse.json({ error: "Staff and the admin account can't be banned." }, { status: 403 })
     }
 
-    // Grab everything needed for cleanup / the IP-blacklist prompt before the
-    // account row (and everything that cascades from it) is gone.
-    const [uploads, images, ipRows] = await Promise.all([
-      sql`select object_key from uploads where user_id = ${target.id}`,
-      sql`select object_key from image_moderation where user_id = ${target.id}`,
-      sql`select ip from user_ips where user_id = ${target.id}`,
-    ])
-
-    const keysToDelete = [
-      ...uploads.map((u) => u.object_key as string),
-      ...images.map((i) => i.object_key as string),
-    ]
-    if (target.music_object_key) keysToDelete.push(target.music_object_key as string)
-    if (target.theme_image_key) keysToDelete.push(target.theme_image_key as string)
-
-    for (const key of keysToDelete) {
-      try {
-        await r2.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: key }))
-      } catch (e) {
-        console.error("[admin/ban] r2 delete failed:", key, e)
-      }
-    }
+    // Grab known IPs before the account (and everything cascading from it,
+    // including user_ips) is gone — used for the IP-blacklist follow-up prompt.
+    const ipRows = await sql`select ip from user_ips where user_id = ${target.id}`
 
     const banReason = reason ?? "Banned via admin panel"
     await sql`
@@ -59,15 +47,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
       on conflict (type, value) do nothing
     `
 
-    // uploads.user_id is ON DELETE SET NULL (not cascade), so their links have to
-    // be removed explicitly — otherwise the rows would survive as orphaned entries.
-    await sql`delete from uploads where user_id = ${target.id}`
-
-    // Deletes the account itself — cascades to sessions, trusted_devices,
-    // verification_codes, image_moderation, and user_ips via their FK
-    // constraints. Donations are kept (their user_id just becomes null) so
-    // past leaderboard totals aren't silently rewritten.
-    await sql`delete from users where id = ${target.id}`
+    await purgeAccount(target.id)
+    await logModAction(actor, "ban_user", target.username, reason ?? undefined)
 
     return NextResponse.json({ ok: true, ips: ipRows.map((r) => r.ip as string) })
   } catch (err) {

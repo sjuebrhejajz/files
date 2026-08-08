@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { requireAdmin, AuthError } from "@/lib/auth"
+import { logModAction } from "@/lib/mod-log"
+
+// SECURITY: explicit, independent of the Cache-Control header middleware.ts
+// also sets on all /api/admin/* and /api/user/* routes. This stops Next.js
+// from ever treating the route as cacheable in the first place. Added after
+// confirming an admin-only endpoint's response was being served to a
+// signed-out incognito request — nothing here previously told Next.js this
+// data depends on who's asking.
+export const dynamic = "force-dynamic"
 
 // This whole route requires admin (not just staff) — see requireAdmin() below —
 // which is what actually enforces "moderators can't promote anyone to bug
@@ -59,6 +68,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
       }
       await sql`update users set is_donator = false where id = ${target.id}`
     }
+
+    await logModAction(actor, action, target.username)
 
     return NextResponse.json({ ok: true })
   } catch (err) {

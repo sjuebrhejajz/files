@@ -230,3 +230,20 @@ create table if not exists user_badges (
 );
 
 create index if not exists idx_user_badges_user on user_badges(user_id);
+
+-- Audit trail of moderation actions (bans, blacklist changes, role changes,
+-- badge grants, image moderation decisions, etc). actor_username is stored
+-- denormalized so log entries stay readable even if the actor's own account
+-- is later deleted. Viewable by any staff member; only admins can clear it
+-- (enforced in app/api/admin/logs/route.ts, not here).
+create table if not exists moderation_logs (
+  id uuid primary key default gen_random_uuid(),
+  actor_id uuid references users(id) on delete set null,
+  actor_username text not null,
+  action text not null,
+  target text,
+  details text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_moderation_logs_created on moderation_logs(created_at desc);

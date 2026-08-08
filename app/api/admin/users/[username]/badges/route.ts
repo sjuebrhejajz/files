@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { requireAdmin, AuthError } from "@/lib/auth"
+import { logModAction } from "@/lib/mod-log"
+
+// SECURITY: explicit, independent of the Cache-Control header middleware.ts
+// also sets on all /api/admin/* and /api/user/* routes. This stops Next.js
+// from ever treating the route as cacheable in the first place. Added after
+// confirming an admin-only endpoint's response was being served to a
+// signed-out incognito request — nothing here previously told Next.js this
+// data depends on who's asking.
+export const dynamic = "force-dynamic"
 
 export async function GET(_req: Request, { params }: { params: Promise<{ username: string }> }) {
   try {
@@ -35,11 +44,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
     const targetId = userRows[0]?.id as string | undefined
     if (!targetId) return NextResponse.json({ error: "User not found." }, { status: 404 })
 
+    const badgeRows = await sql`select name from custom_badges where id = ${badgeId}`
+    const badgeName = badgeRows[0]?.name as string | undefined
+
     await sql`
       insert into user_badges (user_id, badge_id, granted_by)
       values (${targetId}, ${badgeId}, ${admin.id})
       on conflict (user_id, badge_id) do nothing
     `
+    await logModAction(admin, "badge_grant", username, badgeName ? `badge: ${badgeName}` : undefined)
     return NextResponse.json({ ok: true })
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status })
@@ -50,7 +63,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ username: string }> }) {
   try {
-    await requireAdmin()
+    const admin = await requireAdmin()
     const { username } = await params
     const { searchParams } = new URL(req.url)
     const badgeId = searchParams.get("badgeId")
@@ -60,7 +73,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ usern
     const targetId = userRows[0]?.id as string | undefined
     if (!targetId) return NextResponse.json({ error: "User not found." }, { status: 404 })
 
+    const badgeRows = await sql`select name from custom_badges where id = ${badgeId}`
+    const badgeName = badgeRows[0]?.name as string | undefined
+
     await sql`delete from user_badges where user_id = ${targetId} and badge_id = ${badgeId}`
+    await logModAction(admin, "badge_revoke", username, badgeName ? `badge: ${badgeName}` : undefined)
     return NextResponse.json({ ok: true })
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status })

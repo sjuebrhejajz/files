@@ -2,6 +2,16 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { requireStaff, AuthError } from "@/lib/auth"
 import { blacklistTypeSchema } from "@/lib/validators"
+import { purgeAccountsForBlacklistEntry } from "@/lib/blacklist-purge"
+import { logModAction } from "@/lib/mod-log"
+
+// SECURITY: explicit, independent of the Cache-Control header middleware.ts
+// also sets on all /api/admin/* and /api/user/* routes. This stops Next.js
+// from ever treating the route as cacheable in the first place. Added after
+// confirming an admin-only endpoint's response was being served to a
+// signed-out incognito request — nothing here previously told Next.js this
+// data depends on who's asking.
+export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
@@ -67,7 +77,13 @@ export async function POST(req: Request) {
       returning id
     `
 
-    return NextResponse.json({ ok: true, id: insertRows[0].id })
+    // Blacklisting an identifier also removes every account tied to it, and
+    // their files — a username/email/IP being bad enough to blacklist means
+    // any account using it shouldn't keep existing either.
+    const purgedUsernames = await purgeAccountsForBlacklistEntry(type.data, value, actor)
+    await logModAction(actor, "blacklist_add", value, reason ?? undefined)
+
+    return NextResponse.json({ ok: true, id: insertRows[0].id, purgedUsernames })
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status })
     console.error("[admin/blacklist POST]", err)

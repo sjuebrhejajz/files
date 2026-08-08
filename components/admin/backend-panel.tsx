@@ -25,7 +25,7 @@ import { CustomBadge } from "@/components/custom-badge"
 
 const spooky = Creepster({ subsets: ["latin"], weight: "400" })
 
-type Tab = "users" | "blacklist" | "moderation" | "uploads" | "badges"
+type Tab = "users" | "blacklist" | "moderation" | "uploads" | "badges" | "logs"
 
 type UserRow = {
   id: string
@@ -99,26 +99,27 @@ export function BackendPanel({ currentUser }: { currentUser: PublicUser }) {
       </p>
 
       <div className="mb-6 flex gap-1 border-b border-border">
-        {(["users", "blacklist", "moderation", "uploads", ...(isAdmin ? (["badges"] as Tab[]) : [])] as Tab[]).map(
-          (t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`px-3 py-2 text-xs font-medium capitalize transition-colors ${
-                tab === t ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t === "moderation" ? "Moderation Queue" : t === "uploads" ? "All Uploads" : t}
-            </button>
-          ),
-        )}
+        {(
+          ["users", "blacklist", "moderation", "uploads", "logs", ...(isAdmin ? (["badges"] as Tab[]) : [])] as Tab[]
+        ).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`px-3 py-2 text-xs font-medium capitalize transition-colors ${
+              tab === t ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t === "moderation" ? "Moderation Queue" : t === "uploads" ? "All Uploads" : t}
+          </button>
+        ))}
       </div>
 
       {tab === "users" && <UsersTab isAdmin={isAdmin} currentUser={currentUser} />}
       {tab === "blacklist" && <BlacklistTab />}
       {tab === "moderation" && <ModerationTab />}
       {tab === "uploads" && <UploadsTab />}
+      {tab === "logs" && <LogsTab isAdmin={isAdmin} />}
       {tab === "badges" && isAdmin && <BadgesTab />}
     </main>
   )
@@ -303,7 +304,15 @@ function UserDetail({
     setActionLoading(true)
     setError(null)
     try {
-      await call("/api/admin/blacklist", { type: "ip", value: ip, reason: `From ${target.username}'s known IPs` })
+      const result = await call("/api/admin/blacklist", {
+        type: "ip",
+        value: ip,
+        reason: `From ${target.username}'s known IPs`,
+      })
+      const purged = (result.purgedUsernames as string[]) ?? []
+      if (purged.length > 0) {
+        window.alert(`Also deleted ${purged.length} account(s) tied to this IP: ${purged.join(", ")}`)
+      }
       load()
     } catch (err) {
       setError((err as Error).message)
@@ -670,7 +679,11 @@ function BlacklistTab() {
     setLoading(true)
     setError(null)
     try {
-      await call("/api/admin/blacklist", { type, value, reason })
+      const result = await call("/api/admin/blacklist", { type, value, reason })
+      const purged = (result.purgedUsernames as string[]) ?? []
+      if (purged.length > 0) {
+        window.alert(`Also deleted ${purged.length} account(s) tied to this ${type}: ${purged.join(", ")}`)
+      }
       setValue("")
       setReason("")
       load()
@@ -700,6 +713,10 @@ function BlacklistTab() {
 
       <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="mb-3 text-sm font-medium text-foreground">Add entry</h3>
+        <p className="mb-3 text-[11px] text-destructive">
+          Blacklisting also permanently deletes any account (and its files) tied to this value — not just future
+          signups.
+        </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <select
             value={type}
@@ -1033,6 +1050,109 @@ function BadgesTab() {
               <button type="button" disabled={loading} onClick={() => remove(b.id)} className="text-muted-foreground hover:text-destructive">
                 <Trash2 className="size-4" />
               </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// ==================== Moderation Logs tab ====================
+
+type LogEntry = {
+  id: string
+  actor_username: string
+  action: string
+  target: string | null
+  details: string | null
+  created_at: string
+}
+
+function LogsTab({ isAdmin }: { isAdmin: boolean }) {
+  const [logs, setLogs] = useState<LogEntry[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(() => {
+    call("/api/admin/logs", undefined, "GET")
+      .then((data) => setLogs(data.logs))
+      .catch((err) => setError((err as Error).message))
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const clearOne = async (id: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      await call(`/api/admin/logs?id=${id}`, undefined, "DELETE")
+      load()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const clearAll = async () => {
+    if (!window.confirm("Clear the entire moderation log? This can't be undone.")) return
+    setLoading(true)
+    setError(null)
+    try {
+      await call("/api/admin/logs", undefined, "DELETE")
+      load()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
+
+      {isAdmin && logs && logs.length > 0 && (
+        <button
+          type="button"
+          disabled={loading}
+          onClick={clearAll}
+          className="flex w-fit items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/20 disabled:opacity-60"
+        >
+          <Trash2 className="size-3.5" /> Clear all logs
+        </button>
+      )}
+
+      {!logs ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : logs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No moderation actions logged yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {logs.map((entry) => (
+            <li key={entry.id} className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card p-3">
+              <div className="min-w-0">
+                <p className="text-xs text-foreground">
+                  <span className="font-medium">{entry.actor_username}</span>{" "}
+                  <span className="text-muted-foreground">{entry.action.replace(/_/g, " ")}</span>
+                  {entry.target && <span className="font-medium"> {entry.target}</span>}
+                </p>
+                {entry.details && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{entry.details}</p>}
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{new Date(entry.created_at).toLocaleString()}</p>
+              </div>
+              {isAdmin && (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => clearOne(entry.id)}
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              )}
             </li>
           ))}
         </ul>

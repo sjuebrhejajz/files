@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server"
-import { DeleteObjectCommand } from "@aws-sdk/client-s3"
 import { sql } from "@/lib/db"
-import { r2, BUCKET_NAME } from "@/lib/r2"
 import { requireStaff, AuthError } from "@/lib/auth"
+import { purgeAccount } from "@/lib/purge-account"
+import { logModAction } from "@/lib/mod-log"
+
+// SECURITY: explicit, independent of the Cache-Control header middleware.ts
+// also sets on all /api/admin/* and /api/user/* routes. This stops Next.js
+// from ever treating the route as cacheable in the first place. Added after
+// confirming an admin-only endpoint's response was being served to a
+// signed-out incognito request — nothing here previously told Next.js this
+// data depends on who's asking.
+export const dynamic = "force-dynamic"
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -50,23 +58,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       } else {
         await sql`update users set banner_url = ${url} where id = ${item.user_id}`
       }
+      await logModAction(actor, "image_approve", item.username as string, `kind: ${item.kind}`)
     } else if (action === "deny") {
       await sql`
         update image_moderation set status = 'denied', reason = ${reason}, reviewed_by = ${actor.id}, reviewed_at = now()
         where id = ${id}
       `
+      await logModAction(actor, "image_deny", item.username as string, reason ?? `kind: ${item.kind}`)
     } else {
-      // ban: mark the image banned, remove the object from storage, and blacklist
-      // the account's username + email so they can't re-register, log in, or upload.
-      await sql`
-        update image_moderation set status = 'banned', reason = ${reason}, reviewed_by = ${actor.id}, reviewed_at = now()
-        where id = ${id}
-      `
-      try {
-        await r2.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: item.object_key }))
-      } catch (e) {
-        console.error("[admin/moderation] r2 delete failed:", e)
-      }
+      // ban: blacklisting the account now also purges it entirely (files +
+      // account row) — see lib/purge-account.ts — so this isn't just "deny
+      // this one image" anymore, it removes the whole account.
       const banReason = reason ?? "Banned via moderation queue"
       await sql`
         insert into blacklist (type, value, reason, created_by)
@@ -78,6 +80,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         values ('email', ${String(item.email).toLowerCase()}, ${banReason}, ${actor.id})
         on conflict (type, value) do nothing
       `
+      const bannedUsername = item.username as string
+      await purgeAccount(item.user_id as string)
+      await logModAction(actor, "ban_user", bannedUsername, `via moderation queue — ${banReason}`)
     }
 
     return NextResponse.json({ ok: true })

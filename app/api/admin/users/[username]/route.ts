@@ -2,6 +2,15 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { requireStaff, AuthError } from "@/lib/auth"
 
+// Explicit, independent of the Cache-Control header middleware.ts also sets —
+// this stops Next.js from ever treating the route itself as cacheable in the
+// first place, rather than only stopping a downstream cache from storing the
+// response. Belt and suspenders: this route returned full account details
+// (email, role, 2FA status, IPs, upload history) for any username with no
+// session at all before this was added, because nothing here previously told
+// Next.js this data depends on who's asking.
+export const dynamic = "force-dynamic"
+
 export async function GET(_req: Request, { params }: { params: Promise<{ username: string }> }) {
   try {
     await requireStaff()
