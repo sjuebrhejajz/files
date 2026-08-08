@@ -2,6 +2,7 @@ import { Uploader } from "@/components/uploader"
 import { PresenceBadge } from "@/components/presence-badge"
 import { DonateBox } from "@/components/donate-box"
 import { UserMenu } from "@/components/auth/user-menu"
+import { ConvertPromoBanner } from "@/components/convert-promo-banner"
 import { Clock, ShieldCheck, Zap, Lock, Users as UsersIcon, HardDrive, Coins } from "lucide-react"
 import { sql } from "@/lib/db"
 import { neonFont } from "@/lib/fonts"
@@ -130,6 +131,8 @@ export default async function Page() {
           </div>
         </aside>
       </div>
+
+      <ConvertPromoBanner />
     </main>
   )
 }

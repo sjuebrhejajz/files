@@ -4,6 +4,7 @@ import { Settings, ArrowLeft, ShieldAlert } from "lucide-react"
 import { getCurrentUser, isStaff } from "@/lib/auth"
 import { LinksList } from "@/components/dashboard/links-list"
 import { Leaderboard } from "@/components/dashboard/leaderboard"
+import { ConvertPromoBanner } from "@/components/convert-promo-banner"
 
 export default async function DashboardPage() {
   const user = await getCurrentUser()
@@ -47,6 +48,8 @@ export default async function DashboardPage() {
         <h2 className="mb-3 text-sm font-medium text-foreground">Top donors</h2>
         <Leaderboard />
       </section>
+
+      <ConvertPromoBanner />
     </main>
   )
 }

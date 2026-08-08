@@ -10,6 +10,19 @@ const SESSION_DAYS_DEFAULT = 1 // if "remember this device" is not checked, sess
 const SESSION_DAYS_REMEMBERED = 30
 const DEVICE_DAYS = 60
 
+// Shared login across *.uncertain.uk subdomains (e.g. convert.uncertain.uk):
+// a cookie set without an explicit Domain is host-only — readable only on
+// the exact host that set it. Setting Domain to the parent domain makes it
+// readable by any subdomain instead. Only applied in real production
+// (VERCEL_ENV, not NODE_ENV — Vercel sets NODE_ENV=production for preview
+// builds too) — a *.vercel.app preview URL can't set a cookie scoped to
+// .uncertain.uk at all (browsers reject a Domain that doesn't match the
+// current origin), so this must stay host-only anywhere but the real domain.
+// This alone doesn't give another subdomain a working login — that
+// subdomain's own backend needs matching session-validation logic against
+// the same database before it can actually use this cookie.
+const COOKIE_DOMAIN = process.env.VERCEL_ENV === "production" ? ".uncertain.uk" : undefined
+
 export type Role = "user" | "moderator" | "admin" | "tester"
 
 export type PublicUser = {
@@ -65,6 +78,7 @@ export async function createSession(userId: string, remember: boolean) {
     secure: true,
     sameSite: "lax",
     path: "/",
+    domain: COOKIE_DOMAIN,
     expires: expiresAt,
   })
 }
@@ -75,7 +89,9 @@ export async function destroySession() {
   if (token) {
     await sql`delete from sessions where token_hash = ${sha256(token)}`
   }
-  jar.delete(SESSION_COOKIE)
+  // Domain must match what the cookie was originally set with, or the
+  // browser won't recognize it as the same cookie to delete.
+  jar.set(SESSION_COOKIE, "", { path: "/", domain: COOKIE_DOMAIN, expires: new Date(0) })
 }
 
 export async function getCurrentUser(): Promise<PublicUser | null> {
