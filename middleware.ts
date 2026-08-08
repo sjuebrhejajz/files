@@ -42,7 +42,12 @@ const ASSET_LIMIT = { limit: 240, windowMs: 60_000 }
 // a different user regardless of what any individual route does or doesn't
 // declare. This is the actual fix — everything else here is rate limiting.
 function isSensitiveApi(path: string): boolean {
-  return path.startsWith("/api/admin/") || path.startsWith("/api/user/")
+  return (
+    path.startsWith("/api/admin/") ||
+    path.startsWith("/api/user/") ||
+    path === "/api/leaderboard" ||
+    path.startsWith("/api/auth/discord/")
+  )
 }
 
 export function middleware(request: NextRequest) {
@@ -95,5 +100,7 @@ export const config = {
     "/a/:path*",
     "/api/admin/:path*",
     "/api/user/:path*",
+    "/api/leaderboard",
+    "/api/auth/discord/:path*",
   ],
 }

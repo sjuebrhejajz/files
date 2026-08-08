@@ -198,10 +198,12 @@ function ImageSection({
       .catch(() => {})
   }, [kind])
 
+  const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]
+
   const onFile = async (file: File) => {
     setError(null)
-    if (!file.type.startsWith("image/")) {
-      setError("Only image files are allowed.")
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setError("Only PNG, JPEG, WebP, or GIF images are allowed.")
       return
     }
     if (file.size > MAX_IMAGE_BYTES) {
@@ -263,7 +265,7 @@ function ImageSection({
           </span>
           <input
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/webp,image/gif"
             disabled={loading}
             onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
             // The real file input, sized and positioned exactly over the
@@ -277,7 +279,7 @@ function ImageSection({
         </div>
       </div>
       <p className="mt-2 text-[11px] text-muted-foreground">
-        Images only (GIF ok, no video) · up to 25 MB · reviewed by staff before it's public
+        PNG, JPEG, WebP, or GIF · up to 25 MB · reviewed by staff before it's public
       </p>
     </Section>
   )

@@ -2,6 +2,13 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { requireCurrentUser, AuthError } from "@/lib/auth"
 
+// SECURITY: this is auth-gated ("only visible after login") but sits outside
+// /api/admin/* and /api/user/*, so it wasn't covered by the Cache-Control
+// fix in middleware.ts. Explicit here since it can't rely on that broad
+// prefix match. Low-sensitivity data (top donor usernames), but the "only
+// after login" gate itself should actually hold regardless.
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   try {
     await requireCurrentUser() // leaderboard is only visible after login
@@ -14,7 +21,9 @@ export async function GET() {
       order by total_cents desc
       limit 3
     `
-    return NextResponse.json({ leaderboard: rows })
+    const res = NextResponse.json({ leaderboard: rows })
+    res.headers.set("Cache-Control", "no-store, private")
+    return res
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status })
     console.error("[leaderboard]", err)

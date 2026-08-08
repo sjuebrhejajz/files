@@ -5,19 +5,16 @@ import { requireCurrentUser, AuthError } from "@/lib/auth"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
-const EXT_BY_TYPE: Record<string, string> = {
+// SECURITY: same fix as avatar-url/route.ts — strict allowlist instead of an
+// "image/*" prefix check. SVG is deliberately excluded (it can embed
+// <script> and execute as XSS if ever rendered/served inline), and an
+// unrecognized MIME type can no longer pick its own extension via a fallback.
+const ALLOWED_TYPES: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/jpg": "jpg",
   "image/webp": "webp",
   "image/gif": "gif",
-  "image/svg+xml": "svg",
-  "image/bmp": "bmp",
-  "image/x-icon": "ico",
-  "image/heic": "heic",
-  "image/heif": "heif",
-  "image/avif": "avif",
-  "image/tiff": "tiff",
 }
 
 const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
@@ -29,8 +26,9 @@ export async function POST(req: Request) {
     const contentType = String(body.contentType ?? "")
     const size = Number(body.size ?? 0)
 
-    if (!contentType.startsWith("image/")) {
-      return NextResponse.json({ error: "Only image files are allowed." }, { status: 400 })
+    const ext = ALLOWED_TYPES[contentType]
+    if (!ext) {
+      return NextResponse.json({ error: "Only PNG, JPEG, WebP, or GIF images are allowed." }, { status: 400 })
     }
     if (!size || size > MAX_BYTES) {
       return NextResponse.json({ error: "Images must be 25 MB or smaller." }, { status: 400 })
@@ -41,7 +39,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Uploads are not available for this account." }, { status: 403 })
     }
 
-    const ext = EXT_BY_TYPE[contentType] ?? contentType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") ?? "bin"
     // Namespaced under banners/ (parallel to avatars/) so the cleanup cron skips these too.
     const key = `banners/${user.id}-${Date.now()}.${ext}`
 

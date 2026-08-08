@@ -5,21 +5,19 @@ import { requireCurrentUser, AuthError } from "@/lib/auth"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
-// Any image/* content type is accepted (png, jpeg, webp, gif, svg, heic, avif, etc).
-// Anything that isn't an image — video, audio, whatever — is rejected outright.
-const EXT_BY_TYPE: Record<string, string> = {
+// SECURITY: this used to accept any "image/*" prefix, including SVG — SVG
+// files can embed <script> tags and execute as XSS if ever rendered/served
+// inline, so it's excluded even though it's technically an image format.
+// This is now a strict allowlist of the actually-popular raster formats
+// (plus GIF) instead of a prefix check, so an unrecognized/unknown
+// "image/whatever" MIME type can no longer sneak through and pick its own
+// extension via the old fallback logic.
+const ALLOWED_TYPES: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/jpg": "jpg",
   "image/webp": "webp",
   "image/gif": "gif",
-  "image/svg+xml": "svg",
-  "image/bmp": "bmp",
-  "image/x-icon": "ico",
-  "image/heic": "heic",
-  "image/heif": "heif",
-  "image/avif": "avif",
-  "image/tiff": "tiff",
 }
 
 const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
@@ -31,8 +29,9 @@ export async function POST(req: Request) {
     const contentType = String(body.contentType ?? "")
     const size = Number(body.size ?? 0)
 
-    if (!contentType.startsWith("image/")) {
-      return NextResponse.json({ error: "Only image files are allowed." }, { status: 400 })
+    const ext = ALLOWED_TYPES[contentType]
+    if (!ext) {
+      return NextResponse.json({ error: "Only PNG, JPEG, WebP, or GIF images are allowed." }, { status: 400 })
     }
     if (!size || size > MAX_BYTES) {
       return NextResponse.json({ error: "Images must be 25 MB or smaller." }, { status: 400 })
@@ -43,7 +42,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Uploads are not available for this account." }, { status: 403 })
     }
 
-    const ext = EXT_BY_TYPE[contentType] ?? contentType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") ?? "bin"
     // Reuses the same R2 bucket/credentials the file uploader already uses — no separate
     // S3_* env vars needed. Namespaced under avatars/ so the cleanup cron can skip these.
     const key = `avatars/${user.id}-${Date.now()}.${ext}`

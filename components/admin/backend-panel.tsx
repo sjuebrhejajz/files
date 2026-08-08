@@ -885,6 +885,7 @@ function UploadsTab() {
   const [query, setQuery] = useState("")
   const [uploads, setUploads] = useState<UploadRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const load = useCallback(() => {
     call(`/api/admin/uploads?q=${encodeURIComponent(query)}`, undefined, "GET")
@@ -896,6 +897,20 @@ function UploadsTab() {
     const handle = setTimeout(load, 250)
     return () => clearTimeout(handle)
   }, [load])
+
+  const remove = async (upload: UploadRow) => {
+    if (!window.confirm(`Delete "${upload.filename}"? This can't be undone.`)) return
+    setDeletingId(upload.id)
+    setError(null)
+    try {
+      await call(`/api/admin/uploads/${upload.id}`, undefined, "DELETE")
+      setUploads((list) => (list ? list.filter((u) => u.id !== upload.id) : list))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -925,14 +940,24 @@ function UploadsTab() {
                   {f.uploader ?? "anonymous"} · {new Date(f.createdAt).toLocaleString()}
                 </p>
               </div>
-              <a
-                href={f.viewUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex shrink-0 items-center gap-1 text-xs text-primary hover:underline"
-              >
-                Preview <ExternalLink className="size-3" />
-              </a>
+              <div className="flex shrink-0 items-center gap-3">
+                <a
+                  href={f.viewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  Preview <ExternalLink className="size-3" />
+                </a>
+                <button
+                  type="button"
+                  disabled={deletingId === f.id}
+                  onClick={() => remove(f)}
+                  className="text-muted-foreground hover:text-destructive disabled:opacity-60"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
             </li>
           ))}
         </ul>

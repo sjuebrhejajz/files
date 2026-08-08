@@ -4,6 +4,10 @@ import { sql } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { exchangeDiscordCode, fetchDiscordUser } from "@/lib/discord"
 
+// SECURITY: consistent with the rest of the auth-sensitive routes — explicit
+// rather than relying solely on Next.js detecting the cookies() call below.
+export const dynamic = "force-dynamic"
+
 export async function GET(req: Request) {
   const settingsUrl = new URL("/dashboard/settings", req.url)
 
