@@ -5,20 +5,30 @@ import { r2, BUCKET_NAME } from "@/lib/r2"
 
 export const dynamic = "force-dynamic"
 
-// SECURITY: HTML and SVG can both embed <script> and, if served inline
-// (Content-Disposition: inline) with their real content type, execute as a
-// live, full page on this site's own origin when someone navigates directly
-// to the URL — not just render as a picture. That's exactly what a reported
-// "lol.svg" upload was: a stored-XSS payload. Since script execution
-// happens in this origin, it can piggyback on whoever's session clicks the
-// link — most dangerously an admin's — to call authenticated APIs and
-// exfiltrate whatever comes back, without ever touching real credentials.
-// These specific types are force-downloaded instead of rendered, and their
-// declared type is overridden so a browser won't try to render them as
-// anything other than an opaque download. This intentionally does NOT
-// restrict what can be uploaded or shared — .exe, .zip, .svg, .html can
-// still be uploaded and linked, they just can't execute when visited.
-const DANGEROUS_INLINE_TYPES = new Set(["text/html", "application/xhtml+xml", "image/svg+xml"])
+// SECURITY: this used to be a blacklist (block a few known-dangerous types,
+// allow everything else inline) — that's the wrong default for exactly the
+// reason it sounds: it only blocks what's specifically been thought of, so
+// anything not on the list (e.g. XML, which some browsers will run an
+// XSLT stylesheet transform on and generate live HTML from) sails through
+// unblocked. This is now an allowlist instead: only actual renderable media
+// (images minus SVG, video, audio, PDF) is ever served inline. Everything
+// else — every text/* and application/* type, every unrecognized type, with
+// no exceptions — is force-downloaded by default. This still doesn't
+// restrict what can be uploaded or shared; .exe, .zip, .svg, .html, .xml can
+// all still be uploaded and linked, they just can't execute when visited.
+const SAFE_INLINE_PREFIXES = ["image/", "video/", "audio/"]
+const SAFE_INLINE_EXACT_TYPES = new Set(["application/pdf"])
+// SVG matches the "image/" prefix above but is excluded — it can embed
+// <script> and execute as a full page on this origin if rendered directly,
+// exactly like the "lol.svg" upload that prompted this fix.
+const UNSAFE_INLINE_EXCEPTIONS = new Set(["image/svg+xml"])
+
+function isSafeToRenderInline(rawContentType: string): boolean {
+  const type = rawContentType.split(";")[0].trim().toLowerCase()
+  if (UNSAFE_INLINE_EXCEPTIONS.has(type)) return false
+  if (SAFE_INLINE_EXACT_TYPES.has(type)) return true
+  return SAFE_INLINE_PREFIXES.some((prefix) => type.startsWith(prefix))
+}
 
 // Serves a stored file inline so that Discord (and browsers) can embed/play it
 // directly. Supports HTTP range requests, which Discord's media proxy and video
@@ -37,17 +47,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const displayName = displayNameFor(key)
     const rawContentType = object.ContentType ?? "application/octet-stream"
-    const isDangerous = DANGEROUS_INLINE_TYPES.has(rawContentType.split(";")[0].trim().toLowerCase())
+    const safeInline = isSafeToRenderInline(rawContentType)
 
     const headers = new Headers()
-    headers.set("Content-Type", isDangerous ? "application/octet-stream" : rawContentType)
+    headers.set("Content-Type", safeInline ? rawContentType : "application/octet-stream")
     headers.set(
       "Content-Disposition",
-      `${isDangerous ? "attachment" : "inline"}; filename="${encodeURIComponent(displayName)}"`,
+      `${safeInline ? "inline" : "attachment"}; filename="${encodeURIComponent(displayName)}"`,
     )
     // Belt and suspenders: tells the browser not to try to guess/"sniff" a
     // more specific type than what's declared, closing off MIME-confusion
-    // tricks even for types not in the list above.
+    // tricks even for types this allowlist doesn't explicitly know about.
     headers.set("X-Content-Type-Options", "nosniff")
     headers.set("Accept-Ranges", "bytes")
     headers.set("Cache-Control", "public, max-age=86400, immutable")

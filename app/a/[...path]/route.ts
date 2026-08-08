@@ -6,17 +6,22 @@ import { getCurrentUser, isStaff } from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
-// SECURITY: this route never set Content-Disposition, which means a browser
-// navigating directly to a URL it serves falls back to its own default —
-// inline rendering for any content type it recognizes, including
-// image/svg+xml. SVG can embed <script> and execute on this origin if
-// rendered that way (see app/f/[id]/route.ts for the same issue, confirmed
-// via an actual malicious upload). Every current upload path into this
-// route is already restricted to safe raster formats at upload time
-// (avatars/banners/badges: PNG/JPEG/WebP/GIF, no SVG), but this is enforced
-// here too as a safety net — so a future feature added to this route can't
-// reintroduce the same hole just by forgetting to exclude SVG at upload time.
-const DANGEROUS_INLINE_TYPES = new Set(["text/html", "application/xhtml+xml", "image/svg+xml"])
+// SECURITY: this is an allowlist, not a blacklist — see app/f/[id]/route.ts
+// for the full reasoning (a blacklist only blocks what's specifically been
+// thought of; anything unrecognized, like XML, sails through by default).
+// This route never set Content-Disposition either, meaning direct navigation
+// fell back to the browser's own default of inline rendering for any
+// content type it recognized. Only actual renderable media (images minus
+// SVG, video, audio) is served inline here now; everything else is
+// force-downloaded, regardless of what content-type is stored.
+const SAFE_INLINE_PREFIXES = ["image/", "video/", "audio/"]
+const UNSAFE_INLINE_EXCEPTIONS = new Set(["image/svg+xml"])
+
+function isSafeToRenderInline(rawContentType: string): boolean {
+  const type = rawContentType.split(";")[0].trim().toLowerCase()
+  if (UNSAFE_INLINE_EXCEPTIONS.has(type)) return false
+  return SAFE_INLINE_PREFIXES.some((prefix) => type.startsWith(prefix))
+}
 
 // Serves avatar/banner/music/theme/video/badge files directly by their known
 // object key. Unlike /f/[id], which resolves an opaque short id by scanning
@@ -90,11 +95,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const object = await r2.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }))
 
     const rawContentType = object.ContentType ?? "application/octet-stream"
-    const isDangerous = DANGEROUS_INLINE_TYPES.has(rawContentType.split(";")[0].trim().toLowerCase())
+    const safeInline = isSafeToRenderInline(rawContentType)
 
     const headers = new Headers()
-    headers.set("Content-Type", isDangerous ? "application/octet-stream" : rawContentType)
-    if (isDangerous) headers.set("Content-Disposition", "attachment")
+    headers.set("Content-Type", safeInline ? rawContentType : "application/octet-stream")
+    if (!safeInline) headers.set("Content-Disposition", "attachment")
     headers.set("X-Content-Type-Options", "nosniff")
     // Never let a shared/CDN cache hold onto an unapproved image, a disabled
     // track, or a private theme background.
