@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
-import { requireCurrentUser, AuthError, hashPassword } from "@/lib/auth"
-import { usernameSchema, passwordSchema, bioSchema } from "@/lib/validators"
+import { requireCurrentUser, isAdmin, AuthError, hashPassword } from "@/lib/auth"
+import { usernameSchema, usernameSchemaUnfiltered, passwordSchema, bioSchema, bioSchemaUnfiltered } from "@/lib/validators"
 import { isBlacklisted } from "@/lib/blacklist"
 import { requireReauth } from "@/lib/reauth"
 
@@ -9,15 +9,20 @@ export async function PATCH(req: Request) {
   try {
     const user = await requireCurrentUser()
     const body = await req.json()
+    const admin = isAdmin(user)
 
     // ---- username (requires current password, +2FA code if enabled) ----
     if (typeof body.username === "string") {
-      const parsed = usernameSchema.safeParse(body.username)
+      // The admin account is exempt from the content-word filter and the
+      // blacklist check on its own username — everyone else still goes
+      // through both.
+      const schema = admin ? usernameSchemaUnfiltered : usernameSchema
+      const parsed = schema.safeParse(body.username)
       if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
 
       await requireReauth(user, body)
 
-      if (await isBlacklisted({ username: parsed.data })) {
+      if (!admin && (await isBlacklisted({ username: parsed.data }))) {
         return NextResponse.json({ error: "This username is blacklisted." }, { status: 403 })
       }
 
@@ -40,9 +45,10 @@ export async function PATCH(req: Request) {
       await sql`update users set password_hash = ${passwordHash} where id = ${user.id}`
     }
 
-    // ---- bio (no links allowed) ----
+    // ---- bio (no links allowed; content-word filter skipped for admin) ----
     if (typeof body.bio === "string") {
-      const parsed = bioSchema.safeParse(body.bio)
+      const schema = admin ? bioSchemaUnfiltered : bioSchema
+      const parsed = schema.safeParse(body.bio)
       if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
       await sql`update users set bio = ${parsed.data || null} where id = ${user.id}`
     }

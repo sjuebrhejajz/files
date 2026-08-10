@@ -2,19 +2,17 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { MessageCircle } from "lucide-react"
 import { getPublicProfile } from "@/lib/profiles"
-import { getCurrentUser, isStaff } from "@/lib/auth"
 import { neonFont } from "@/lib/fonts"
 import { RoleBadge } from "@/components/role-badge"
 import { DonatorBadge } from "@/components/donator-badge"
 import { CustomBadge } from "@/components/custom-badge"
 import { ProfileAudioPlayer } from "@/components/profile-audio-player"
 import { LinkPreview } from "@/components/link-preview"
-import { ProfileVideoBackground } from "@/components/profile-video-background"
 
 type Props = { params: Promise<{ username: string }> }
 
-// This page reads live per-user data (video/music toggles, bio, badges,
-// links) straight from the database on every request, and none of that
+// This page reads live per-user data (music toggle, bio, badges, links)
+// straight from the database on every request, and none of that
 // counts as a Next.js "dynamic API" — without this, Next.js has no signal
 // that the page depends on anything request-specific and caches the
 // rendered HTML instead of re-running the query on each visit.
@@ -40,7 +38,7 @@ function Pill({ children }: { children: React.ReactNode }) {
 
 export default async function PublicProfilePage({ params }: Props) {
   const { username } = await params
-  const [profile, viewer] = await Promise.all([getPublicProfile(username), getCurrentUser()])
+  const profile = await getPublicProfile(username)
   if (!profile) notFound()
 
   const memberSince = new Date(profile.created_at).toLocaleDateString(undefined, {
@@ -48,39 +46,9 @@ export default async function PublicProfilePage({ params }: Props) {
     year: "numeric",
   })
 
-  // The video background is opt-in per profile (currently admin-only, see
-  // lib/profiles.ts) and is always rendered muted — any sound comes from the
-  // separate music widget above, never from the background video itself.
-  const hasVideoBackground = profile.video_enabled && Boolean(profile.video_url)
-
-  // Owner, staff, and testers see the debug line at the bottom — never the
-  // raw src (that's the actual asset path, not something to expose even to
-  // trusted-but-non-staff testers), just booleans about what the page decided.
-  const canSeeDebug = Boolean(
-    viewer &&
-      (viewer.username.toLowerCase() === profile.username.toLowerCase() || isStaff(viewer) || viewer.role === "tester"),
-  )
-
   return (
-    <>
-      {/* Rendered as a sibling of <main>, not a descendant of it. <main> has
-          position:relative, which creates its own stacking context — a
-          position:fixed child inside that context gets its z-index evaluated
-          relative to main's *other* children instead of the page root, which
-          is almost certainly why this was invisible even though every value
-          checked out correctly (confirmed via the debug line below). The
-          working custom-theme background (components/theme-provider.tsx)
-          uses this exact same top-level placement, which is what tipped this
-          off — same fixed+-z-10 pattern, but never nested inside anything
-          positioned. */}
-      {hasVideoBackground && <ProfileVideoBackground src={profile.video_url as string} debug={canSeeDebug} />}
-
-      <main className="relative mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 lg:max-w-4xl">
-        <div
-          className={`animate-in fade-in slide-in-from-bottom-2 duration-500 mb-4 overflow-hidden rounded-xl border border-border bg-card transition-shadow ${
-            hasVideoBackground ? "bg-card/80 shadow-[0_0_40px_-12px_var(--primary)] backdrop-blur-md" : ""
-          }`}
-        >
+    <main className="relative mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 lg:max-w-4xl">
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 mb-4 overflow-hidden rounded-xl border border-border bg-card">
           {profile.banner_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={profile.banner_url} alt="" className="h-32 w-full object-cover lg:h-48" />
@@ -238,14 +206,6 @@ export default async function PublicProfilePage({ params }: Props) {
             </a>
           </aside>
         </div>
-
-        {canSeeDebug && (
-          <p className="mt-10 rounded-md border border-border bg-secondary/40 px-3 py-2 font-mono text-[10px] text-muted-foreground">
-            [debug, only you/staff/testers see this] video_enabled={String(profile.video_enabled)} · has_video_source=
-            {String(Boolean(profile.video_url))} · resolved=<b className="text-foreground">{String(hasVideoBackground)}</b>
-          </p>
-        )}
       </main>
-    </>
   )
 }

@@ -16,12 +16,11 @@ const LIMITS: Record<string, { limit: number; windowMs: number }> = {
   "/api/user/settings/banner-url": { limit: 10, windowMs: 60_000 },
   "/api/user/settings/music-url": { limit: 10, windowMs: 60_000 },
   "/api/user/settings/theme-url": { limit: 10, windowMs: 60_000 },
-  "/api/user/settings/video-url": { limit: 10, windowMs: 60_000 },
   "/api/admin/badges/image-url": { limit: 10, windowMs: 60_000 },
 }
 
-// /a/ (avatars, banners, music, themes, profile videos, badges) has dynamic
-// subpaths, e.g. /a/video/<key>, so it can't live in the exact-path LIMITS
+// /a/ (avatars, banners, music, themes, badges) has dynamic
+// subpaths, e.g. /a/badges/<key>, so it can't live in the exact-path LIMITS
 // map above — it gets one shared per-IP bucket across every asset instead.
 // This is the main practical defense against bulk-scraping the bucket: 240
 // requests/min is generous for normal browsing (a single profile page can
@@ -95,7 +94,6 @@ export const config = {
     "/api/user/settings/banner-url",
     "/api/user/settings/music-url",
     "/api/user/settings/theme-url",
-    "/api/user/settings/video-url",
     "/api/admin/badges/image-url",
     "/a/:path*",
     "/api/admin/:path*",

@@ -203,11 +203,14 @@ create unique index if not exists idx_users_discord_id on users(discord_id) wher
 -- generic "Profile music" label. Purely cosmetic — no validation beyond length.
 alter table users add column if not exists music_title text;
 
--- Admin-only full-page background video for a profile. Silent by design —
--- the app always renders it muted regardless of the source file, and the
--- settings UI only exposes this section to role = 'admin'.
-alter table users add column if not exists video_object_key text;
-alter table users add column if not exists video_enabled boolean not null default false;
+-- Profile background video feature (removed) — this used to add
+-- video_object_key/video_enabled columns; dropping them now that the
+-- feature is gone. Any video file that was still referenced needs deleting
+-- from R2 separately first if it hasn't been already (see the app's
+-- purgeAccount/moderation cleanup — this migration only drops the columns,
+-- it doesn't touch storage).
+alter table users drop column if exists video_object_key;
+alter table users drop column if exists video_enabled;
 
 -- Admin-created badge types (name + a small uploaded image) that can be
 -- granted to any number of user profiles. Badge images are admin-uploaded,

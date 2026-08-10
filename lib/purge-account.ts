@@ -4,7 +4,7 @@ import { r2, BUCKET_NAME } from "@/lib/r2"
 
 /**
  * Permanently deletes a user account: their uploaded files, avatar/banner
- * moderation-history objects, music/video/theme assets, and the account row
+ * moderation-history objects, music/theme assets, and the account row
  * itself (which cascades to sessions, trusted_devices, verification_codes,
  * image_moderation, user_ips, and user_badges via FK constraints).
  *
@@ -13,7 +13,7 @@ import { r2, BUCKET_NAME } from "@/lib/r2"
  */
 export async function purgeAccount(userId: string): Promise<void> {
   const rows = await sql`
-    select music_object_key, video_object_key, theme_image_key from users where id = ${userId}
+    select music_object_key, theme_image_key from users where id = ${userId}
   `
   const row = rows[0]
   if (!row) return
@@ -25,7 +25,6 @@ export async function purgeAccount(userId: string): Promise<void> {
 
   const keysToDelete = [...uploads.map((u) => u.object_key as string), ...images.map((i) => i.object_key as string)]
   if (row.music_object_key) keysToDelete.push(row.music_object_key as string)
-  if (row.video_object_key) keysToDelete.push(row.video_object_key as string)
   if (row.theme_image_key) keysToDelete.push(row.theme_image_key as string)
 
   for (const key of keysToDelete) {

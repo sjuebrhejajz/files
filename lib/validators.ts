@@ -11,6 +11,17 @@ export const usernameSchema = z
   .regex(/^[a-zA-Z0-9]+$/, "Username can only contain letters and numbers, no special characters.")
   .refine((val) => !containsBannedTerm(val), "That username isn't allowed.")
 
+// Same length/character rules, no content filter. Only ever used for
+// admin-initiated username changes — their own account, or force-renaming
+// someone else via the backend — never for public registration or a
+// non-admin's own settings update.
+export const usernameSchemaUnfiltered = z
+  .string()
+  .trim()
+  .min(5, "Username must be over 4 characters.")
+  .max(20, "Username must be at most 20 characters.")
+  .regex(/^[a-zA-Z0-9]+$/, "Username can only contain letters and numbers, no special characters.")
+
 export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters.")
@@ -37,5 +48,14 @@ export const bioSchema = z
   .max(280, "Bio must be at most 280 characters.")
   .refine((val) => !LINK_PATTERN.test(val), "Bio can't contain links.")
   .refine((val) => !containsBannedTerm(val), "That bio isn't allowed.")
+
+// Same length + no-links rules, no content-word filter. Only ever used when
+// staff force-edit someone else's bio from the backend — never for a
+// regular user's own settings update.
+export const bioSchemaUnfiltered = z
+  .string()
+  .trim()
+  .max(280, "Bio must be at most 280 characters.")
+  .refine((val) => !LINK_PATTERN.test(val), "Bio can't contain links.")
 
 export const blacklistTypeSchema = z.enum(["ip", "username", "email"])

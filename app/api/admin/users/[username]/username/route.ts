@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { requireStaff, isAdmin, isStaff, AuthError } from "@/lib/auth"
-import { usernameSchema } from "@/lib/validators"
+import { usernameSchema, usernameSchemaUnfiltered } from "@/lib/validators"
 import { isBlacklisted } from "@/lib/blacklist"
 import { logModAction } from "@/lib/mod-log"
 
@@ -19,7 +19,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
     const { username } = await params
     const body = await req.json()
 
-    const parsed = usernameSchema.safeParse(body.username)
+    // Admin force-renames skip the content-word filter entirely — moderators
+    // still go through it.
+    const actorIsAdmin = isAdmin(actor)
+    const schema = actorIsAdmin ? usernameSchemaUnfiltered : usernameSchema
+    const parsed = schema.safeParse(body.username)
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     const newUsername = parsed.data
 
@@ -31,11 +35,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
       return NextResponse.json({ error: "The admin account's username can't be changed." }, { status: 403 })
     }
     // Moderators can rename regular users and testers; only an admin can rename another staff account.
-    if (isStaff({ role: target.role }) && !isAdmin(actor)) {
+    if (isStaff({ role: target.role }) && !actorIsAdmin) {
       return NextResponse.json({ error: "Only admins can rename staff accounts." }, { status: 403 })
     }
 
-    if (await isBlacklisted({ username: newUsername })) {
+    if (!actorIsAdmin && (await isBlacklisted({ username: newUsername }))) {
       return NextResponse.json({ error: "This username is blacklisted." }, { status: 403 })
     }
 

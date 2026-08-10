@@ -219,6 +219,7 @@ function UserDetail({
   const [actionLoading, setActionLoading] = useState(false)
   const [banReason, setBanReason] = useState("")
   const [newUsername, setNewUsername] = useState("")
+  const [bioValue, setBioValue] = useState<string | null>(null)
 
   const load = useCallback(() => {
     call(`/api/admin/users/${encodeURIComponent(username)}`, undefined, "GET")
@@ -264,6 +265,20 @@ function UserDetail({
       // The old username is now stale (it just changed), so bounce back to the
       // list — a fresh lookup by the new name isn't wired up on this screen.
       onBack()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const forceBio = async (nextBio: string) => {
+    setActionLoading(true)
+    setError(null)
+    try {
+      await call(`/api/admin/users/${encodeURIComponent(username)}/bio`, { bio: nextBio })
+      setBioValue(nextBio)
+      load()
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -452,6 +467,30 @@ function UserDetail({
           <p className="mt-2 text-[11px] text-muted-foreground">
             Same rules as normal signup apply: 5–20 characters, letters and numbers only, no blacklisted or banned words.
           </p>
+        </div>
+      )}
+
+      {!isTargetAdmin && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="mb-3 text-sm font-medium text-foreground">Force edit bio</h3>
+          <textarea
+            value={bioValue ?? target.bio ?? ""}
+            onChange={(e) => setBioValue(e.target.value)}
+            maxLength={280}
+            rows={3}
+            className="w-full resize-none rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+          />
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-[11px] text-muted-foreground">Max 280 characters, no links. Word filter doesn't apply here.</p>
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={() => forceBio(bioValue ?? target.bio ?? "")}
+              className="shrink-0 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+            >
+              Save bio
+            </button>
+          </div>
         </div>
       )}
 
