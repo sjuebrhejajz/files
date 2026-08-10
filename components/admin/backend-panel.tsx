@@ -702,6 +702,7 @@ function BlacklistTab() {
   const [value, setValue] = useState("")
   const [reason, setReason] = useState("")
   const [loading, setLoading] = useState(false)
+  const [query, setQuery] = useState("")
 
   const load = useCallback(() => {
     call("/api/admin/blacklist", undefined, "GET")
@@ -746,6 +747,16 @@ function BlacklistTab() {
     }
   }
 
+  const q = query.trim().toLowerCase()
+  const filteredEntries = entries?.filter(
+    (e) =>
+      q === "" ||
+      e.type.toLowerCase().includes(q) ||
+      e.value.toLowerCase().includes(q) ||
+      (e.reason ?? "").toLowerCase().includes(q) ||
+      (e.created_by_username ?? "").toLowerCase().includes(q),
+  )
+
   return (
     <div className="flex flex-col gap-4">
       {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
@@ -789,13 +800,25 @@ function BlacklistTab() {
         </div>
       </div>
 
+      <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by type, value, reason, or who added it…"
+          className="w-full bg-transparent text-sm text-foreground outline-none"
+        />
+      </div>
+
       {!entries ? (
         <p className="text-xs text-muted-foreground">Loading…</p>
       ) : entries.length === 0 ? (
         <p className="text-xs text-muted-foreground">Blacklist is empty.</p>
+      ) : filteredEntries && filteredEntries.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No entries match "{query}".</p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {entries.map((e) => (
+          {filteredEntries?.map((e) => (
             <li key={e.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
               <div className="min-w-0">
                 <p className="text-xs font-medium text-foreground">
@@ -1012,6 +1035,7 @@ function BadgesTab() {
   const [name, setName] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [query, setQuery] = useState("")
 
   const load = useCallback(() => {
     call("/api/admin/badges", undefined, "GET")
@@ -1066,6 +1090,9 @@ function BadgesTab() {
     }
   }
 
+  const q = query.trim().toLowerCase()
+  const filteredBadges = badges?.filter((b) => q === "" || b.name.toLowerCase().includes(q))
+
   return (
     <div className="flex flex-col gap-4">
       {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
@@ -1099,13 +1126,27 @@ function BadgesTab() {
         <p className="mt-2 text-[11px] text-muted-foreground">PNG, JPEG, or WebP · up to 2 MB · always public</p>
       </div>
 
+      {badges && badges.length > 0 && (
+        <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+          <Search className="size-3.5 shrink-0 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search badges by name…"
+            className="w-full bg-transparent text-sm text-foreground outline-none"
+          />
+        </div>
+      )}
+
       {!badges ? (
         <p className="text-xs text-muted-foreground">Loading…</p>
       ) : badges.length === 0 ? (
         <p className="text-xs text-muted-foreground">No badges created yet.</p>
+      ) : filteredBadges && filteredBadges.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No badges match "{query}".</p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {badges.map((b) => (
+          {filteredBadges?.map((b) => (
             <li key={b.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2">
                 <CustomBadge name={b.name} imageUrl={b.imageUrl} />
@@ -1137,6 +1178,7 @@ function LogsTab({ isAdmin }: { isAdmin: boolean }) {
   const [logs, setLogs] = useState<LogEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [query, setQuery] = useState("")
 
   const load = useCallback(() => {
     call("/api/admin/logs", undefined, "GET")
@@ -1175,9 +1217,29 @@ function LogsTab({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  const q = query.trim().toLowerCase()
+  const filteredLogs = logs?.filter(
+    (entry) =>
+      q === "" ||
+      entry.actor_username.toLowerCase().includes(q) ||
+      entry.action.toLowerCase().includes(q) ||
+      (entry.target ?? "").toLowerCase().includes(q) ||
+      (entry.details ?? "").toLowerCase().includes(q),
+  )
+
   return (
     <div className="flex flex-col gap-4">
       {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
+
+      <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by actor, action, or target…"
+          className="w-full bg-transparent text-sm text-foreground outline-none"
+        />
+      </div>
 
       {isAdmin && logs && logs.length > 0 && (
         <button
@@ -1194,9 +1256,11 @@ function LogsTab({ isAdmin }: { isAdmin: boolean }) {
         <p className="text-xs text-muted-foreground">Loading…</p>
       ) : logs.length === 0 ? (
         <p className="text-xs text-muted-foreground">No moderation actions logged yet.</p>
+      ) : filteredLogs && filteredLogs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No log entries match "{query}".</p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {logs.map((entry) => (
+          {filteredLogs?.map((entry) => (
             <li key={entry.id} className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card p-3">
               <div className="min-w-0">
                 <p className="text-xs text-foreground">

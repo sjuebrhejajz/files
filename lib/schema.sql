@@ -250,3 +250,10 @@ create table if not exists moderation_logs (
 );
 
 create index if not exists idx_moderation_logs_created on moderation_logs(created_at desc);
+
+-- Lets an uploader extend their own file's expiration by 7 days at a time,
+-- available once the upload is 3+ days old and at most once every 3 days
+-- after that (see app/api/user/links/[id]/extend/route.ts). Never lets a
+-- file outlive 10,000 days from its original upload, no matter how many
+-- times it's extended — null means never extended yet.
+alter table uploads add column if not exists last_extended_at timestamptz;

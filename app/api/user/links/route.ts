@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const user = await requireCurrentUser()
     const rows = await sql`
-      select id, short_id, filename, content_type, created_at, expires_at
+      select id, short_id, filename, content_type, created_at, expires_at, last_extended_at
       from uploads
       where user_id = ${user.id}
       order by created_at desc
@@ -19,6 +19,7 @@ export async function GET() {
       contentType: r.content_type as string | null,
       created_at: r.created_at,
       expires_at: r.expires_at,
+      last_extended_at: r.last_extended_at,
     }))
     return NextResponse.json({ links })
   } catch (err) {

@@ -6,6 +6,7 @@ import {
   KeyRound,
   Link2,
   Loader2,
+  Search,
   ShieldCheck,
   ShieldOff,
   Sparkles,
@@ -28,11 +29,41 @@ async function call(url: string, body: unknown, method: "POST" | "PATCH" = "POST
 
 type Category = "profile" | "perks" | "connections" | "account"
 
-const CATEGORIES: { id: Category; label: string; description: string; icon: ComponentType<{ className?: string }> }[] = [
-  { id: "profile", label: "Profile", description: "Picture, banner, bio & public visibility", icon: UserIcon },
-  { id: "perks", label: "Perks", description: "Music widget & custom site theme", icon: Sparkles },
-  { id: "connections", label: "Connections", description: "Link your Discord account", icon: Link2 },
-  { id: "account", label: "Account", description: "Username, email, password & 2FA", icon: KeyRound },
+const CATEGORIES: {
+  id: Category
+  label: string
+  description: string
+  icon: ComponentType<{ className?: string }>
+  keywords: string[]
+}[] = [
+  {
+    id: "profile",
+    label: "Profile",
+    description: "Picture, banner, bio & public visibility",
+    icon: UserIcon,
+    keywords: ["avatar", "picture", "banner", "bio", "links", "public"],
+  },
+  {
+    id: "perks",
+    label: "Perks",
+    description: "Music widget & custom site theme",
+    icon: Sparkles,
+    keywords: ["music", "theme", "color", "background", "donator"],
+  },
+  {
+    id: "connections",
+    label: "Connections",
+    description: "Link your Discord account",
+    icon: Link2,
+    keywords: ["discord", "oauth"],
+  },
+  {
+    id: "account",
+    label: "Account",
+    description: "Username, email, password & 2FA",
+    icon: KeyRound,
+    keywords: ["username", "email", "password", "2fa", "two-factor", "security"],
+  },
 ]
 
 export function SettingsForm({ user }: { user: PublicUser }) {
@@ -104,26 +135,45 @@ export function SettingsForm({ user }: { user: PublicUser }) {
 }
 
 function WelcomeView({ user, onSelect }: { user: PublicUser; onSelect: (c: Category) => void }) {
+  const [query, setQuery] = useState("")
+  const q = query.trim().toLowerCase()
+  const filtered = CATEGORIES.filter(
+    (c) => q === "" || [c.label, c.description, ...c.keywords].some((s) => s.toLowerCase().includes(q)),
+  )
+
   return (
     <div>
       <h2 className="mb-1 text-base font-semibold text-foreground">Welcome, {user.username}</h2>
-      <p className="mb-6 text-xs text-muted-foreground">Pick a category to manage your account.</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => onSelect(c.id)}
-            className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/40"
-          >
-            <span className="flex size-8 items-center justify-center rounded-md bg-secondary text-foreground">
-              <c.icon className="size-4" />
-            </span>
-            <span className="text-sm font-medium text-foreground">{c.label}</span>
-            <span className="text-[11px] text-muted-foreground">{c.description}</span>
-          </button>
-        ))}
+      <p className="mb-4 text-xs text-muted-foreground">Pick a category to manage your account.</p>
+      <div className="mb-4 flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search settings…"
+          className="w-full bg-transparent text-sm text-foreground outline-none"
+        />
       </div>
+      {filtered.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No settings match "{query}".</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {filtered.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onSelect(c.id)}
+              className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/40"
+            >
+              <span className="flex size-8 items-center justify-center rounded-md bg-secondary text-foreground">
+                <c.icon className="size-4" />
+              </span>
+              <span className="text-sm font-medium text-foreground">{c.label}</span>
+              <span className="text-[11px] text-muted-foreground">{c.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
