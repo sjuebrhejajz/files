@@ -19,7 +19,17 @@ import {
   UserMinus,
 } from "lucide-react"
 import type { PublicUser, Role } from "@/lib/auth"
-import { isAdmin as checkIsAdmin, isOwner as checkIsOwner } from "@/lib/auth"
+
+// Local, client-safe copies of lib/auth.ts's isAdmin()/isOwner() — that file
+// imports next/headers (for cookies()), and importing anything runtime from
+// it here pulls the whole server-only module into the client bundle, which
+// Next.js rejects at build time. These only need the role string.
+function checkIsAdmin(user: Pick<PublicUser, "role">): boolean {
+  return user.role === "admin" || user.role === "owner"
+}
+function checkIsOwner(user: Pick<PublicUser, "role">): boolean {
+  return user.role === "owner"
+}
 import { RoleBadge } from "@/components/role-badge"
 import { DonatorBadge } from "@/components/donator-badge"
 import { CustomBadge } from "@/components/custom-badge"

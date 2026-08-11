@@ -14,7 +14,15 @@ import {
 } from "lucide-react"
 import type { ComponentType } from "react"
 import type { PublicUser } from "@/lib/auth"
-import { isStaff } from "@/lib/auth"
+
+// A local, client-safe copy of lib/auth.ts's isStaff() — that file imports
+// next/headers (for cookies()), and importing anything runtime from it here
+// pulls the whole server-only module into the client bundle, which Next.js
+// rejects at build time. This only needs the role string, so it doesn't
+// need any of that.
+function isStaffClient(user: Pick<PublicUser, "role">): boolean {
+  return user.role === "moderator" || user.role === "admin" || user.role === "owner"
+}
 import { useTheme } from "@/components/theme-provider"
 
 async function call(url: string, body: unknown, method: "POST" | "PATCH" = "POST") {
@@ -256,7 +264,7 @@ function ImageSection({
       setError("Only PNG, JPEG, WebP, or GIF images are allowed.")
       return
     }
-    if (!isStaff(user) && file.size > MAX_IMAGE_BYTES) {
+    if (!isStaffClient(user) && file.size > MAX_IMAGE_BYTES) {
       setError("Images must be 25 MB or smaller.")
       return
     }
@@ -472,7 +480,7 @@ function MusicSection({ user }: { user: PublicUser }) {
       setError("Only MP3 files are allowed.")
       return
     }
-    if (!isStaff(user) && file.size > MAX_MUSIC_BYTES) {
+    if (!isStaffClient(user) && file.size > MAX_MUSIC_BYTES) {
       setError("Track must be 15 MB or smaller.")
       return
     }
@@ -671,7 +679,7 @@ function ThemeSection({ user }: { user: PublicUser }) {
       setError("Only image files are allowed.")
       return
     }
-    if (!isStaff(user) && file.size > MAX_THEME_IMAGE_BYTES) {
+    if (!isStaffClient(user) && file.size > MAX_THEME_IMAGE_BYTES) {
       setError("Image must be 25 MB or smaller.")
       return
     }
