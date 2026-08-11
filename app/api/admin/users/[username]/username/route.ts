@@ -31,8 +31,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
     const target = rows[0]
     if (!target) return NextResponse.json({ error: "User not found." }, { status: 404 })
 
-    if (String(target.username).toLowerCase() === "admin") {
-      return NextResponse.json({ error: "The admin account's username can't be changed." }, { status: 403 })
+    if (String(target.username).toLowerCase() === "admin" || target.role === "owner") {
+      return NextResponse.json({ error: "This account's username can't be changed here." }, { status: 403 })
     }
     // Moderators can rename regular users and testers; only an admin can rename another staff account.
     if (isStaff({ role: target.role }) && !actorIsAdmin) {

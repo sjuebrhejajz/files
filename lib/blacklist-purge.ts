@@ -40,7 +40,7 @@ export async function purgeAccountsForBlacklistEntry(
     const id = target.id as string
     const username = target.username as string
     const role = target.role as string
-    const isProtected = role === "moderator" || role === "admin" || username.toLowerCase() === "admin"
+    const isProtected = role === "moderator" || role === "admin" || role === "owner" || username.toLowerCase() === "admin"
     if (isProtected) continue
 
     await purgeAccount(id)

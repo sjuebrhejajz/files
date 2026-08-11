@@ -1,12 +1,13 @@
 "use client"
 
 import { useId, useState } from "react"
-import { Shield, Bug } from "lucide-react"
+import { Shield, Bug, Crown } from "lucide-react"
 import type { Role } from "@/lib/auth"
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
 const CONFIG: Partial<Record<Role, { label: string; className: string; icon: IconComponent }>> = {
+  owner: { label: "Owner", className: "text-amber-400", icon: Crown },
   admin: { label: "Site Administrator", className: "text-red-500", icon: Shield },
   moderator: { label: "Moderator", className: "text-sky-400", icon: Shield },
   tester: { label: "Bug Hunter", className: "text-lime-400", icon: Bug },

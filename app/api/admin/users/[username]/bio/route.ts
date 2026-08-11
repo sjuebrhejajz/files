@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/db"
-import { requireStaff, AuthError } from "@/lib/auth"
+import { requireStaff, isAdmin, isStaff, AuthError } from "@/lib/auth"
 import { bioSchemaUnfiltered } from "@/lib/validators"
 import { logModAction } from "@/lib/mod-log"
 
@@ -19,9 +19,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
     const parsed = bioSchemaUnfiltered.safeParse(body.bio ?? "")
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
 
-    const rows = await sql`select id, bio from users where lower(username) = ${username.toLowerCase()}`
+    const rows = await sql`select id, username, role, bio from users where lower(username) = ${username.toLowerCase()}`
     const target = rows[0]
     if (!target) return NextResponse.json({ error: "User not found." }, { status: 404 })
+
+    if (String(target.username).toLowerCase() === "admin" || target.role === "owner") {
+      return NextResponse.json({ error: "This account's bio can't be force-edited." }, { status: 403 })
+    }
+    // Same hierarchy as force-rename: a moderator can edit a regular user's or
+    // tester's bio, but only an admin (or owner) can touch another staff account's.
+    if (isStaff({ role: target.role }) && !isAdmin(actor)) {
+      return NextResponse.json({ error: "Only admins can edit staff accounts' bios." }, { status: 403 })
+    }
 
     await sql`update users set bio = ${parsed.data || null} where id = ${target.id}`
     await logModAction(actor, "force_bio_edit", username, parsed.data ? undefined : "cleared")

@@ -3,10 +3,10 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { type NextRequest, NextResponse } from "next/server"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 import { sql } from "@/lib/db"
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser, isStaff } from "@/lib/auth"
 import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
-// 250 MB per file
+// 250 MB per file — waived entirely for staff (mod/admin/owner), see below.
 const MAX_BYTES = 250 * 1024 * 1024
 const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -25,11 +25,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing filename or size" }, { status: 400 })
     }
 
-    if (size > MAX_BYTES) {
+    const user = await getCurrentUser()
+
+    if (size > MAX_BYTES && !(user && isStaff(user))) {
       return NextResponse.json({ error: "Exceeds 250 MB limit" }, { status: 400 })
     }
-
-    const user = await getCurrentUser()
 
     const ip = getClientIp(request)
     if (await isBlacklisted({ ip, username: user?.username, email: user?.email })) {

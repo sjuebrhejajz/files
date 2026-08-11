@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { requireAdmin, AuthError } from "@/lib/auth"
+import { requireOwner, AuthError } from "@/lib/auth"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 
 // SECURITY: SVG dropped — it can embed <script> and execute if ever viewed
@@ -17,7 +17,8 @@ const MAX_BYTES = 2 * 1024 * 1024 // 2 MB — these are small badge icons
 
 export async function POST(req: Request) {
   try {
-    const admin = await requireAdmin()
+    // Part of the badge-creation flow, so owner-only, same as POST /api/admin/badges.
+    const owner = await requireOwner()
     const body = await req.json()
     const contentType = String(body.contentType ?? "")
     const size = Number(body.size ?? 0)
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Badge image must be 2 MB or smaller." }, { status: 400 })
     }
 
-    const key = `badges/${admin.id}-${Date.now()}.${ext}`
+    const key = `badges/${owner.id}-${Date.now()}.${ext}`
     const uploadUrl = await getSignedUrl(
       r2,
       new PutObjectCommand({ Bucket: BUCKET_NAME, Key: key, ContentType: contentType }),

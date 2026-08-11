@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { requireCurrentUser, AuthError } from "@/lib/auth"
+import { requireCurrentUser, isStaff, AuthError } from "@/lib/auth"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 import { hasDonatorPerks } from "@/lib/donations"
 import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
 const ALLOWED_TYPES = new Set(["audio/mpeg", "audio/mp3"])
-const MAX_BYTES = 15 * 1024 * 1024 // 15 MB
+const MAX_BYTES = 15 * 1024 * 1024 // 15 MB — waived entirely for staff (mod/admin/owner)
 
 export async function POST(req: Request) {
   try {
@@ -15,7 +15,9 @@ export async function POST(req: Request) {
 
     // Server-side gate — the settings UI hides this from non-donors, but that's
     // not enforcement, so check again here regardless of what the client sends.
-    if (!hasDonatorPerks(user)) {
+    // (hasDonatorPerks already treats admin/owner as donators, so staff never
+    // actually hit this check — kept for moderators, who aren't auto-donators.)
+    if (!isStaff(user) && !hasDonatorPerks(user)) {
       return NextResponse.json({ error: "Donate any amount to unlock the music widget." }, { status: 403 })
     }
 
@@ -26,7 +28,7 @@ export async function POST(req: Request) {
     if (!ALLOWED_TYPES.has(contentType)) {
       return NextResponse.json({ error: "Only MP3 files are allowed." }, { status: 400 })
     }
-    if (!size || size > MAX_BYTES) {
+    if (!size || (!isStaff(user) && size > MAX_BYTES)) {
       return NextResponse.json({ error: "Track must be 15 MB or smaller." }, { status: 400 })
     }
 

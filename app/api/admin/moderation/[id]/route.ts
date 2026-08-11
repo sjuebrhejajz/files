@@ -33,7 +33,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!item) return NextResponse.json({ error: "Not found." }, { status: 404 })
 
     const targetIsStaff =
-      item.role === "moderator" || item.role === "admin" || String(item.username).toLowerCase() === "admin"
+      item.role === "moderator" || item.role === "admin" || item.role === "owner" || String(item.username).toLowerCase() === "admin"
 
     // Whitelist protection: staff and the admin account can never be banned this way.
     // (Approve/deny are non-punitive and stay allowed regardless.)

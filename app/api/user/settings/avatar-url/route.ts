@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { requireCurrentUser, AuthError } from "@/lib/auth"
+import { requireCurrentUser, isStaff, AuthError } from "@/lib/auth"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
@@ -20,7 +20,7 @@ const ALLOWED_TYPES: Record<string, string> = {
   "image/gif": "gif",
 }
 
-const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
+const MAX_BYTES = 25 * 1024 * 1024 // 25 MB — waived entirely for staff (mod/admin/owner)
 
 export async function POST(req: Request) {
   try {
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     if (!ext) {
       return NextResponse.json({ error: "Only PNG, JPEG, WebP, or GIF images are allowed." }, { status: 400 })
     }
-    if (!size || size > MAX_BYTES) {
+    if (!size || (!isStaff(user) && size > MAX_BYTES)) {
       return NextResponse.json({ error: "Images must be 25 MB or smaller." }, { status: 400 })
     }
 

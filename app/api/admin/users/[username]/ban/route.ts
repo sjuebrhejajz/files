@@ -26,7 +26,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ usernam
     if (!target) return NextResponse.json({ error: "User not found." }, { status: 404 })
 
     const targetIsStaff =
-      target.role === "moderator" || target.role === "admin" || String(target.username).toLowerCase() === "admin"
+      target.role === "moderator" ||
+      target.role === "admin" ||
+      target.role === "owner" ||
+      String(target.username).toLowerCase() === "admin"
     if (targetIsStaff) {
       return NextResponse.json({ error: "Staff and the admin account can't be banned." }, { status: 403 })
     }

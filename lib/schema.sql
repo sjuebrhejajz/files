@@ -102,7 +102,10 @@ begin
   if exists (select 1 from pg_constraint where conname = 'users_role_check') then
     alter table users drop constraint users_role_check;
   end if;
-  alter table users add constraint users_role_check check (role in ('user', 'moderator', 'admin', 'tester'));
+  -- 'owner' added: a single, above-admin role. There's deliberately no API
+  -- path that grants it — see the note at the bottom of this file for the
+  -- one-time manual command to set it on your own account.
+  alter table users add constraint users_role_check check (role in ('user', 'moderator', 'admin', 'tester', 'owner'));
 end $$;
 
 alter table users add column if not exists bio text;
@@ -257,3 +260,13 @@ create index if not exists idx_moderation_logs_created on moderation_logs(create
 -- file outlive 10,000 days from its original upload, no matter how many
 -- times it's extended — null means never extended yet.
 alter table uploads add column if not exists last_extended_at timestamptz;
+
+-- ============================================================================
+-- The 'owner' role has no grant path anywhere in the app on purpose — not
+-- even for other owners. It's the one role above admin, so promoting to it
+-- is a deliberate, manual, one-time action you run yourself:
+--
+--   update users set role = 'owner' where lower(username) = 'your-username-here';
+--
+-- Do this once for your own account after this migration runs.
+-- ============================================================================

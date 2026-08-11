@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server"
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { requireCurrentUser, AuthError } from "@/lib/auth"
+import { requireCurrentUser, isStaff, AuthError } from "@/lib/auth"
 import { r2, BUCKET_NAME } from "@/lib/r2"
 import { hasDonatorPerks } from "@/lib/donations"
 import { isBlacklisted, getClientIp } from "@/lib/blacklist"
 
 // Static images only — explicitly no GIFs (they're allowed for avatars/banners,
-// but not here) and no video, per the "no videos or gifs" requirement.
+// but not here) and no video, per the "no videos or gifs" requirement. This
+// restriction stays in place even for staff — it's about format, not size.
 const EXT_BY_TYPE: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -20,7 +21,7 @@ const EXT_BY_TYPE: Record<string, string> = {
   "image/tiff": "tiff",
 }
 
-const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
+const MAX_BYTES = 25 * 1024 * 1024 // 25 MB — waived entirely for staff (mod/admin/owner)
 
 export async function POST(req: Request) {
   try {
@@ -28,7 +29,9 @@ export async function POST(req: Request) {
 
     // Server-side gate — the settings UI hides this from non-donors, but that's
     // not enforcement, so check again here regardless of what the client sends.
-    if (!hasDonatorPerks(user)) {
+    // (hasDonatorPerks already treats admin/owner as donators, so staff never
+    // actually hit this check — kept for moderators, who aren't auto-donators.)
+    if (!isStaff(user) && !hasDonatorPerks(user)) {
       return NextResponse.json({ error: "Donate any amount to unlock custom themes." }, { status: 403 })
     }
 
@@ -42,7 +45,7 @@ export async function POST(req: Request) {
     if (!EXT_BY_TYPE[contentType]) {
       return NextResponse.json({ error: "Unsupported image type." }, { status: 400 })
     }
-    if (!size || size > MAX_BYTES) {
+    if (!size || (!isStaff(user) && size > MAX_BYTES)) {
       return NextResponse.json({ error: "Image must be 25 MB or smaller." }, { status: 400 })
     }
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { notFound } from "next/navigation"
-import { MessageCircle } from "lucide-react"
+import { ArrowLeft, MessageCircle } from "lucide-react"
 import { getPublicProfile } from "@/lib/profiles"
 import { neonFont } from "@/lib/fonts"
 import { RoleBadge } from "@/components/role-badge"
@@ -48,6 +49,10 @@ export default async function PublicProfilePage({ params }: Props) {
 
   return (
     <main className="relative mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 lg:max-w-4xl">
+      <Link href="/" className="mb-4 flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-primary">
+        <ArrowLeft className="size-3.5" /> Back to files.uncertain.uk
+      </Link>
+
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 mb-4 overflow-hidden rounded-xl border border-border bg-card">
           {profile.banner_url ? (
             // eslint-disable-next-line @next/next/no-img-element

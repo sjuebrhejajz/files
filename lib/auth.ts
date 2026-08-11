@@ -23,7 +23,7 @@ const DEVICE_DAYS = 60
 // the same database before it can actually use this cookie.
 const COOKIE_DOMAIN = process.env.VERCEL_ENV === "production" ? ".uncertain.uk" : undefined
 
-export type Role = "user" | "moderator" | "admin" | "tester"
+export type Role = "user" | "moderator" | "admin" | "owner" | "tester"
 
 export type PublicUser = {
   id: string
@@ -117,30 +117,51 @@ export async function requireCurrentUser(): Promise<PublicUser> {
 }
 
 // ---------- roles ----------
+//
+// Hierarchy: owner > admin > moderator > (tester/user are peers, not really
+// "above" user — tester just flags a beta-access account).
+// isStaff/isAdmin are deliberately inclusive of higher roles — owner passes
+// every isAdmin() check too, since owner has everything admin has plus a
+// short list of owner-exclusive actions (see isOwner below and the callers
+// that specifically check it: badge creation, mod->admin promotion,
+// granting/revoking donator status).
 
 export function isStaff(user: Pick<PublicUser, "role">): boolean {
-  return user.role === "moderator" || user.role === "admin"
+  return user.role === "moderator" || user.role === "admin" || user.role === "owner"
 }
 
 export function isAdmin(user: Pick<PublicUser, "role">): boolean {
-  return user.role === "admin"
+  return user.role === "admin" || user.role === "owner"
+}
+
+export function isOwner(user: Pick<PublicUser, "role">): boolean {
+  return user.role === "owner"
 }
 
 export function isDonator(user: Pick<PublicUser, "is_donator">): boolean {
   return user.is_donator === true
 }
 
-/** Throws 401 if not signed in, 403 if signed in but not moderator/admin. */
+/** Throws 401 if not signed in, 403 if signed in but not moderator/admin/owner. */
 export async function requireStaff(): Promise<PublicUser> {
   const user = await requireCurrentUser()
   if (!isStaff(user)) throw new AuthError("Staff access only.", 403)
   return user
 }
 
-/** Throws 401 if not signed in, 403 if signed in but not admin. */
+/** Throws 401 if not signed in, 403 if signed in but not admin/owner. */
 export async function requireAdmin(): Promise<PublicUser> {
   const user = await requireCurrentUser()
   if (!isAdmin(user)) throw new AuthError("Admin access only.", 403)
+  return user
+}
+
+/** Throws 401 if not signed in, 403 if signed in but not owner. For the
+ * small set of actions even admin can't do: creating badges, promoting
+ * moderator -> admin, and granting/revoking donator status. */
+export async function requireOwner(): Promise<PublicUser> {
+  const user = await requireCurrentUser()
+  if (!isOwner(user)) throw new AuthError("Owner access only.", 403)
   return user
 }
 

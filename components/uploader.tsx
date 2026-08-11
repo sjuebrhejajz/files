@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { UploadCloud, Copy, Check, X, FileIcon, Loader2, ExternalLink } from "lucide-react"
 
 const MAX_BYTES = 250 * 1024 * 1024
@@ -33,16 +33,32 @@ function origin() {
 export function Uploader() {
   const [items, setItems] = useState<UploadItem[]>([])
   const [dragging, setDragging] = useState(false)
+  const [isStaffUser, setIsStaffUser] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const startUpload = useCallback(async (file: File) => {
-    const id = crypto.randomUUID()
+  // Staff (moderator/admin/owner) have no upload size limit — the server
+  // enforces this authoritatively (see app/api/upload/route.ts), this is
+  // just so staff don't see a client-side "exceeds limit" error before the
+  // request ever reaches the server.
+  useEffect(() => {
+    fetch("/api/user/me")
+      .then((r) => r.json())
+      .then((data) => {
+        const role = data?.user?.role
+        setIsStaffUser(role === "moderator" || role === "admin" || role === "owner")
+      })
+      .catch(() => setIsStaffUser(false))
+  }, [])
 
-    if (file.size > MAX_BYTES) {
-      setItems((prev) => [
-        { id, name: file.name, size: file.size, status: "error", progress: 0, error: "Exceeds 250 MB limit" },
-        ...prev,
-      ])
+  const startUpload = useCallback(
+    async (file: File) => {
+      const id = crypto.randomUUID()
+
+      if (!isStaffUser && file.size > MAX_BYTES) {
+        setItems((prev) => [
+          { id, name: file.name, size: file.size, status: "error", progress: 0, error: "Exceeds 250 MB limit" },
+          ...prev,
+        ])
       return
     }
 
@@ -95,7 +111,7 @@ export function Uploader() {
         ),
       )
     }
-  }, [])
+  }, [isStaffUser])
 
   const handleFiles = useCallback(
     (files: FileList | null) => {

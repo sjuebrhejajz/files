@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import type { ComponentType } from "react"
 import type { PublicUser } from "@/lib/auth"
+import { isStaff } from "@/lib/auth"
 import { useTheme } from "@/components/theme-provider"
 
 async function call(url: string, body: unknown, method: "POST" | "PATCH" = "POST") {
@@ -113,8 +114,8 @@ export function SettingsForm({ user }: { user: PublicUser }) {
               )}
               {category === "perks" && (
                 <>
-                  <MusicSection />
-                  <ThemeSection />
+                  <MusicSection user={user} />
+                  <ThemeSection user={user} />
                 </>
               )}
               {category === "connections" && <DiscordSection />}
@@ -255,7 +256,7 @@ function ImageSection({
       setError("Only PNG, JPEG, WebP, or GIF images are allowed.")
       return
     }
-    if (file.size > MAX_IMAGE_BYTES) {
+    if (!isStaff(user) && file.size > MAX_IMAGE_BYTES) {
       setError("Images must be 25 MB or smaller.")
       return
     }
@@ -430,7 +431,7 @@ function LinksPublicSection({ user }: { user: PublicUser }) {
 
 const MAX_MUSIC_BYTES = 15 * 1024 * 1024 // 15 MB
 
-function MusicSection() {
+function MusicSection({ user }: { user: PublicUser }) {
   const [status, setStatus] = useState<{ eligible: boolean; enabled: boolean; url: string | null; title: string | null } | null>(
     null,
   )
@@ -471,7 +472,7 @@ function MusicSection() {
       setError("Only MP3 files are allowed.")
       return
     }
-    if (file.size > MAX_MUSIC_BYTES) {
+    if (!isStaff(user) && file.size > MAX_MUSIC_BYTES) {
       setError("Track must be 15 MB or smaller.")
       return
     }
@@ -593,7 +594,7 @@ function MusicSection() {
 
 const MAX_THEME_IMAGE_BYTES = 25 * 1024 * 1024 // 25 MB
 
-function ThemeSection() {
+function ThemeSection({ user }: { user: PublicUser }) {
   const { setTheme } = useTheme()
   const [status, setStatus] = useState<{
     eligible: boolean
@@ -670,7 +671,7 @@ function ThemeSection() {
       setError("Only image files are allowed.")
       return
     }
-    if (file.size > MAX_THEME_IMAGE_BYTES) {
+    if (!isStaff(user) && file.size > MAX_THEME_IMAGE_BYTES) {
       setError("Image must be 25 MB or smaller.")
       return
     }

@@ -10,6 +10,7 @@ import type { Role } from "@/lib/auth"
 type Entry = { username: string; profile_picture_url: string | null; role: Role; is_donator: boolean }
 
 const GROUP_LABELS: Record<Role, string> = {
+  owner: "Owner",
   admin: "Administrator",
   moderator: "Moderators",
   tester: "Testers",

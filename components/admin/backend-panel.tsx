@@ -19,6 +19,7 @@ import {
   UserMinus,
 } from "lucide-react"
 import type { PublicUser, Role } from "@/lib/auth"
+import { isAdmin as checkIsAdmin, isOwner as checkIsOwner } from "@/lib/auth"
 import { RoleBadge } from "@/components/role-badge"
 import { DonatorBadge } from "@/components/donator-badge"
 import { CustomBadge } from "@/components/custom-badge"
@@ -85,7 +86,8 @@ async function call(url: string, body?: unknown, method: "GET" | "POST" | "DELET
 
 export function BackendPanel({ currentUser }: { currentUser: PublicUser }) {
   const [tab, setTab] = useState<Tab>("users")
-  const isAdmin = currentUser.role === "admin"
+  const isAdmin = checkIsAdmin(currentUser)
+  const isOwner = checkIsOwner(currentUser)
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-10">
@@ -115,19 +117,19 @@ export function BackendPanel({ currentUser }: { currentUser: PublicUser }) {
         ))}
       </div>
 
-      {tab === "users" && <UsersTab isAdmin={isAdmin} currentUser={currentUser} />}
+      {tab === "users" && <UsersTab isAdmin={isAdmin} isOwner={isOwner} currentUser={currentUser} />}
       {tab === "blacklist" && <BlacklistTab />}
       {tab === "moderation" && <ModerationTab />}
       {tab === "uploads" && <UploadsTab />}
       {tab === "logs" && <LogsTab isAdmin={isAdmin} />}
-      {tab === "badges" && isAdmin && <BadgesTab />}
+      {tab === "badges" && isAdmin && <BadgesTab isOwner={isOwner} />}
     </main>
   )
 }
 
 // ==================== Users tab ====================
 
-function UsersTab({ isAdmin, currentUser }: { isAdmin: boolean; currentUser: PublicUser }) {
+function UsersTab({ isAdmin, isOwner, currentUser }: { isAdmin: boolean; isOwner: boolean; currentUser: PublicUser }) {
   const [query, setQuery] = useState("")
   const [users, setUsers] = useState<UserRow[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -148,6 +150,7 @@ function UsersTab({ isAdmin, currentUser }: { isAdmin: boolean; currentUser: Pub
       <UserDetail
         username={selected}
         isAdmin={isAdmin}
+        isOwner={isOwner}
         currentUser={currentUser}
         onBack={() => {
           setSelected(null)
@@ -192,6 +195,7 @@ function UsersTab({ isAdmin, currentUser }: { isAdmin: boolean; currentUser: Pub
                     {u.is_donator && <DonatorBadge />}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                  <p className="truncate font-mono text-[10px] text-muted-foreground/60">{u.id}</p>
                 </div>
                 <span className="shrink-0 text-[11px] capitalize text-muted-foreground">{u.role}</span>
               </button>
@@ -203,14 +207,59 @@ function UsersTab({ isAdmin, currentUser }: { isAdmin: boolean; currentUser: Pub
   )
 }
 
+// Blurred by default; hover reveals on desktop, click toggles a persistent
+// reveal (needed on mobile, where hover doesn't really exist). block-level,
+// used for the "Known IP addresses" list.
+function BlurredIp({ ip }: { ip: string }) {
+  const [revealed, setRevealed] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={() => setRevealed((v) => !v)}
+      className="block text-left"
+      title={revealed ? "Click to hide" : "Click to reveal"}
+    >
+      <p
+        className={`truncate font-mono text-foreground transition-[filter] duration-150 ${
+          revealed ? "blur-none" : "blur-sm hover:blur-none"
+        }`}
+      >
+        {ip}
+      </p>
+    </button>
+  )
+}
+
+// Same behavior as BlurredIp but inline, for IP values shown mixed in with
+// other text (e.g. the blacklist entry row's "IP 1.2.3.4" line).
+function InlineBlurredValue({ value }: { value: string }) {
+  const [revealed, setRevealed] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={() => setRevealed((v) => !v)}
+      className="inline"
+      title={revealed ? "Click to hide" : "Click to reveal"}
+    >
+      <span
+        className={`font-mono transition-[filter] duration-150 ${revealed ? "blur-none" : "blur-sm hover:blur-none"}`}
+      >
+        {value}
+      </span>
+    </button>
+  )
+}
+
 function UserDetail({
   username,
   isAdmin,
+  isOwner,
   currentUser,
   onBack,
 }: {
   username: string
   isAdmin: boolean
+  isOwner: boolean
   currentUser: PublicUser
   onBack: () => void
 }) {
@@ -236,12 +285,22 @@ function UserDetail({
 
   const target = data.user
   const isTargetAdmin = target.username.toLowerCase() === "admin"
-  const targetIsStaff = target.role === "moderator" || target.role === "admin" || isTargetAdmin
+  const targetIsStaff = target.role === "moderator" || target.role === "admin" || target.role === "owner" || isTargetAdmin
   const isSelf = target.id === currentUser.id
-  const canRename = !isTargetAdmin && (!targetIsStaff || isAdmin)
+  // Owner accounts (and the literal "admin" account) can't be force-renamed
+  // by anyone — same protection the role route applies to role changes.
+  const canRename = !isTargetAdmin && target.role !== "owner" && (!targetIsStaff || isAdmin)
 
   const doRole = async (
-    action: "promote" | "demote" | "make_tester" | "remove_tester" | "make_donator" | "remove_donator",
+    action:
+      | "promote"
+      | "demote"
+      | "promote_to_admin"
+      | "demote_from_admin"
+      | "make_tester"
+      | "remove_tester"
+      | "make_donator"
+      | "remove_donator",
   ) => {
     setActionLoading(true)
     setError(null)
@@ -368,6 +427,7 @@ function UserDetail({
               {target.is_donator && <DonatorBadge />}
             </p>
             <p className="truncate text-xs text-muted-foreground">{target.email}</p>
+            <p className="truncate font-mono text-[10px] text-muted-foreground/60">{target.id}</p>
           </div>
           <span className="shrink-0 text-[11px] capitalize text-muted-foreground">
             {target.role} · joined {new Date(target.created_at).toLocaleDateString()}
@@ -401,6 +461,26 @@ function UserDetail({
             <UserMinus className="size-3.5" /> Demote to user
           </button>
         )}
+        {isOwner && target.role === "moderator" && !isSelf && (
+          <button
+            type="button"
+            disabled={actionLoading}
+            onClick={() => doRole("promote_to_admin")}
+            className="mt-3 mr-2 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+          >
+            <Crown className="size-3.5" /> Promote to admin
+          </button>
+        )}
+        {isOwner && target.role === "admin" && !isSelf && (
+          <button
+            type="button"
+            disabled={actionLoading}
+            onClick={() => doRole("demote_from_admin")}
+            className="mt-3 mr-2 inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-accent disabled:opacity-60"
+          >
+            <UserMinus className="size-3.5" /> Demote to moderator
+          </button>
+        )}
         {isAdmin && target.role === "user" && !isSelf && (
           <button
             type="button"
@@ -421,7 +501,9 @@ function UserDetail({
             <UserMinus className="size-3.5" /> Remove tester
           </button>
         )}
-        {isAdmin && !target.is_donator && !isSelf && (
+        {/* Granting/revoking donator status is owner-only now — admin used to
+            be able to do this, but that's moved up a level. */}
+        {isOwner && !target.is_donator && !isSelf && (
           <button
             type="button"
             disabled={actionLoading}
@@ -431,7 +513,7 @@ function UserDetail({
             <CircleDollarSign className="size-3.5" /> Make donator
           </button>
         )}
-        {isAdmin && target.is_donator && !isSelf && (
+        {isOwner && target.is_donator && !isSelf && (
           <button
             type="button"
             disabled={actionLoading}
@@ -470,7 +552,7 @@ function UserDetail({
         </div>
       )}
 
-      {!isTargetAdmin && (
+      {canRename && (
         <div className="rounded-xl border border-border bg-card p-4">
           <h3 className="mb-3 text-sm font-medium text-foreground">Force edit bio</h3>
           <textarea
@@ -521,7 +603,7 @@ function UserDetail({
             {data.ips.map((row) => (
               <li key={row.ip} className="flex items-center justify-between gap-2 rounded-md border border-border p-2 text-xs">
                 <div className="min-w-0">
-                  <p className="truncate font-mono text-foreground">{row.ip}</p>
+                  <BlurredIp ip={row.ip} />
                   <p className="text-[11px] text-muted-foreground">last seen {new Date(row.last_seen).toLocaleString()}</p>
                 </div>
                 {!targetIsStaff && (
@@ -822,7 +904,8 @@ function BlacklistTab() {
             <li key={e.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
               <div className="min-w-0">
                 <p className="text-xs font-medium text-foreground">
-                  <span className="uppercase text-muted-foreground">{e.type}</span> {e.value}
+                  <span className="uppercase text-muted-foreground">{e.type}</span>{" "}
+                  {e.type === "ip" ? <InlineBlurredValue value={e.value} /> : e.value}
                 </p>
                 <p className="truncate text-[11px] text-muted-foreground">
                   {e.reason || "No reason given"} · added by {e.created_by_username ?? "unknown"}
@@ -1030,7 +1113,7 @@ function UploadsTab() {
 
 // ==================== Badges tab (admin only) ====================
 
-function BadgesTab() {
+function BadgesTab({ isOwner }: { isOwner: boolean }) {
   const [badges, setBadges] = useState<BadgeItem[] | null>(null)
   const [name, setName] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -1097,34 +1180,41 @@ function BadgesTab() {
     <div className="flex flex-col gap-4">
       {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
 
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h3 className="mb-3 text-sm font-medium text-foreground">Create a badge</h3>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Badge name (e.g. Beta Tester)"
-            maxLength={40}
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-          />
-          <div className="relative inline-flex shrink-0">
-            <span
-              aria-hidden
-              className="pointer-events-none flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground"
-            >
-              <Award className="size-3.5" /> {loading ? "Working…" : "Upload image"}
-            </span>
+      {isOwner ? (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="mb-3 text-sm font-medium text-foreground">Create a badge</h3>
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              disabled={loading}
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-              className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Badge name (e.g. Beta Tester)"
+              maxLength={40}
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
             />
+            <div className="relative inline-flex shrink-0">
+              <span
+                aria-hidden
+                className="pointer-events-none flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground"
+              >
+                <Award className="size-3.5" /> {loading ? "Working…" : "Upload image"}
+              </span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={loading}
+                onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+                className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+              />
+            </div>
           </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">PNG, JPEG, or WebP · up to 2 MB · always public</p>
         </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">PNG, JPEG, or WebP · up to 2 MB · always public</p>
-      </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="mb-1 text-sm font-medium text-foreground">Create a badge</h3>
+          <p className="text-[11px] text-muted-foreground">Only the owner can create new badge types.</p>
+        </div>
+      )}
 
       {badges && badges.length > 0 && (
         <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
