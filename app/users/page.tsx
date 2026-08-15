@@ -1,6 +1,8 @@
 import { UsersDirectory } from "@/components/public/users-directory"
 
-export const metadata = { title: "Users — files.uncertain.uk" }
+// The root layout's title template already appends "— files.uncertain.uk"
+// to any plain-string title — this used to include it a second time itself.
+export const metadata = { title: "Users" }
 
 export default function UsersPage() {
   return (

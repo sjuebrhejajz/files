@@ -5,10 +5,41 @@ import { getCurrentUser } from '@/lib/auth'
 import { getUserTheme } from '@/lib/theme'
 import { ThemeProvider, type ClientTheme } from '@/components/theme-provider'
 
+const SITE_URL = 'https://files.uncertain.uk'
+const SITE_DESCRIPTION =
+  'Private file hosting with shareable links that embed in Discord. Up to 250MB, auto-deleted after 7 days.'
+
 export const metadata: Metadata = {
-  title: 'files.uncertain.uk',
-  description: 'Private file hosting with shareable links that embed in Discord. Up to 250MB, auto-deleted after 7 days.',
+  // Required for Next.js to resolve relative URLs (icons, OG tags) into
+  // absolute ones — without this, some crawlers and link-preview bots that
+  // don't resolve relative URLs themselves would see broken links.
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'files.uncertain.uk',
+    // Lets nested pages set their own <title> (already happening on public
+    // profile pages) while keeping "files.uncertain.uk" appended, so search
+    // results and browser tabs stay identifiable as this site.
+    template: '%s — files.uncertain.uk',
+  },
+  description: SITE_DESCRIPTION,
+  keywords: ['file hosting', 'file sharing', 'discord file embed', 'free file upload', 'temporary file host'],
   generator: 'v0.app',
+  // Explicit rather than relying on defaults — this is the actual signal
+  // that gets Google to crawl and index the site at all; app/robots.ts
+  // covers which specific paths to skip.
+  robots: { index: true, follow: true },
+  openGraph: {
+    type: 'website',
+    url: SITE_URL,
+    siteName: 'files.uncertain.uk',
+    title: 'files.uncertain.uk',
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: 'summary',
+    title: 'files.uncertain.uk',
+    description: SITE_DESCRIPTION,
+  },
   icons: {
     icon: [
       {

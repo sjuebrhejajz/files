@@ -23,7 +23,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { username } = await params
   const profile = await getPublicProfile(username)
   if (!profile) return { title: "User not found" }
-  return { title: `${profile.username} — files.uncertain.uk` }
+  // The root layout's title template already appends "— files.uncertain.uk"
+  // to any plain-string title — this used to append it a second time itself.
+  return { title: profile.username }
 }
 
 // Small pill/tag used for the badge-style facts under the header (Donator,
